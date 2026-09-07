@@ -1,0 +1,9 @@
+DirectoryIndex index.php
+Options -Indexes
+
+<IfModule mod_php.c>
+  php_value upload_max_filesize 40M
+  php_value post_max_size 45M
+  php_value max_execution_time 180
+  php_value max_input_time 180
+</IfModule>
