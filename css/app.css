@@ -69,13 +69,17 @@ body {
   background: rgba(255,255,255,.02); cursor: pointer;
 }
 .item.active { border-color: rgba(52,211,153,.5); background: rgba(52,211,153,.1); }
+.item.is-dirty { border-color: rgba(245,158,11,.35); }
 .item-top { display: flex; justify-content: space-between; gap: 8px; }
 .item-title { font-size: 12px; font-weight: 600; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item-id { font-size: 10px; font-family: ui-monospace, monospace; color: #737373; margin: 0; }
-.badge { border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: 600; }
+.badge { border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: 600; white-space: nowrap; }
 .ok { background: rgba(16,185,129,.15); color: #6ee7b7; }
 .warn { background: rgba(245,158,11,.15); color: #fcd34d; }
 .err { background: rgba(244,63,94,.15); color: #fda4af; }
+.busy { background: rgba(56,189,248,.18); color: #7dd3fc; }
+.pending { background: rgba(255,255,255,.08); color: #a3a3a3; }
+.note.warn { color: #fcd34d; }
 .item-meta { margin-top: 6px; font-size: 10px; color: #737373; display: flex; gap: 8px; }
 .item-meta button { background: none; border: 0; color: #a3a3a3; text-decoration: underline; cursor: pointer; font-size: 10px; }
 .item-meta button.del { color: #fb7185; }
@@ -145,5 +149,24 @@ input[type=range] { width: 100%; accent-color: #7cc86a; }
 }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; padding: 16px; overflow: auto; }
 .card { border: 1px solid rgba(255,255,255,.1); border-radius: 12px; background: rgba(255,255,255,.03); padding: 12px; }
+.card.is-busy { border-color: rgba(56,189,248,.45); }
+.card.is-dirty { border-color: rgba(245,158,11,.4); }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.card-name { font-size: 10px; color: #a3a3a3; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-progress { font-size: 10px; color: #7dd3fc; min-height: 16px; margin: 8px 0 0; }
+.progress-bar {
+  height: 6px; margin-top: 8px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden;
+}
+.progress-bar > span {
+  display: block; height: 100%; width: 0; background: linear-gradient(90deg, #0ea5e9, #34d399);
+  transition: width .2s ease;
+}
+.progress-bar.indeterminate > span {
+  width: 40% !important; animation: progress-slide 1.1s ease-in-out infinite;
+}
+@keyframes progress-slide {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(280%); }
+}
 .hidden { display: none; }
 code { color: #a3a3a3; }

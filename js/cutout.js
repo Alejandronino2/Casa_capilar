@@ -21,19 +21,35 @@ async function pngHasTransparency(file) {
   return false;
 }
 
+function stepLabel(key) {
+  const k = String(key || '').toLowerCase();
+  if (k.indexOf('fetch') !== -1 || k.indexOf('download') !== -1) return 'Descargando modelo';
+  if (k.indexOf('init') !== -1 || k.indexOf('session') !== -1) return 'Preparando motor';
+  if (k.indexOf('compute') !== -1 || k.indexOf('infer') !== -1) return 'Quitando fondo';
+  if (k) return 'Procesando ' + key;
+  return 'Procesando';
+}
+
+function emitProgress(onProgress, message, percent) {
+  if (!onProgress) return;
+  onProgress(message, typeof percent === 'number' ? percent : 0);
+}
+
 export async function cutoutImage(source, onProgress, trim) {
-  if (onProgress) onProgress('cargando modelo…');
+  emitProgress(onProgress, 'Cargando motor de recorte…', 2);
   const mod = await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm');
+  emitProgress(onProgress, 'Modelo listo, analizando imagen…', 8);
   const blob = await mod.removeBackground(source, {
     output: { format: 'image/png' },
     progress: function (key, current, total) {
       const pct = total > 0 ? Math.round((current / total) * 100) : 0;
-      if (onProgress) onProgress(key + ' ' + pct + '%');
+      emitProgress(onProgress, stepLabel(key) + ' ' + pct + '%', Math.max(8, Math.min(92, pct)));
     },
   });
-  if (onProgress) onProgress('recortando margenes…');
+  emitProgress(onProgress, 'Recortando margenes transparentes…', 96);
   const raw = await readAsDataUrl(blob);
   const result = await trimTransparent(raw, trim);
+  emitProgress(onProgress, 'Recorte listo', 100);
   return { result: result, rawDataUrl: raw };
 }
 

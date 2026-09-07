@@ -11,6 +11,7 @@
   <header class="header">
     <h1>Recorte de producto <span>fondo fuera con WASM, en el navegador</span></h1>
     <div class="header-actions">
+      <span id="processNote" class="note"></span>
       <button type="button" class="btn" id="btnAdd">Anadir imagenes</button>
       <button type="button" class="btn btn-primary" id="btnProcess">Procesar todo</button>
       <button type="button" class="btn btn-primary" id="btnToEditor" disabled>Enviar al editor</button>

@@ -15,6 +15,8 @@ const state = {
   assetRevision: 0,
   metrics: null,
   exporting: false,
+  saving: false,
+  processingId: '',
 };
 
 const $ = function (sel) { return document.querySelector(sel); };
@@ -23,20 +25,55 @@ function selected() {
   return state.stories.find(function (s) { return s.id === state.selectedId; }) || state.stories[0];
 }
 
+function baselineStories() {
+  try { return JSON.parse(state.baseline || '[]'); } catch (e) { return []; }
+}
+
+function storyIsDirty(story) {
+  const saved = baselineStories().find(function (s) { return s.id === story.id; });
+  if (!saved) return true;
+  return JSON.stringify(story) !== JSON.stringify(saved);
+}
+
 function dirtyCount() {
-  return state.stories.filter(function (s, i) {
-    return JSON.stringify(s) !== JSON.stringify(JSON.parse(state.baseline || '[]')[i] || null);
-  }).length;
+  return state.stories.filter(storyIsDirty).length;
 }
 
 function isDirty() {
   return JSON.stringify(state.stories) !== state.baseline;
 }
 
-function setNote(text, err) {
+function setNote(text, kind) {
   const el = $('#saveNote');
   el.textContent = text || '';
-  el.className = 'note' + (err ? ' err' : '');
+  el.className = 'note' + (kind === 'err' ? ' err' : kind === 'warn' ? ' warn' : '');
+}
+
+function refreshSaveState(note, kind) {
+  const dirty = isDirty();
+  const count = dirtyCount();
+  const btn = $('#saveBtn');
+  if (state.saving) {
+    btn.disabled = true;
+    btn.textContent = 'Guardando…';
+  } else {
+    btn.disabled = !dirty || !!state.processingId;
+    btn.textContent = dirty ? 'Guardar' : 'Guardado';
+  }
+  if (note !== undefined) {
+    setNote(note, kind);
+    return;
+  }
+  if (state.processingId) return;
+  if (dirty) setNote(count + (count === 1 ? ' cambio sin guardar' : ' cambios sin guardar'), 'warn');
+  else if (!state.exporting) setNote('');
+}
+
+function storyBadge(story) {
+  if (state.saving && storyIsDirty(story)) return { cls: 'busy', text: 'guardando' };
+  if (state.processingId === story.id) return { cls: 'busy', text: 'procesando' };
+  if (storyIsDirty(story)) return { cls: 'warn', text: 'sin guardar' };
+  return { cls: 'ok', text: 'guardada' };
 }
 
 async function preview() {
@@ -110,12 +147,13 @@ function renderList() {
   $('#checkAll').checked = allChecked;
   ul.innerHTML = state.stories.map(function (story) {
     const active = story.id === state.selectedId;
-    return '<li><div class="item' + (active ? ' active' : '') + '" data-id="' + story.id + '">' +
+    const badge = storyBadge(story);
+    return '<li><div class="item' + (active ? ' active' : '') + (storyIsDirty(story) ? ' is-dirty' : '') + '" data-id="' + story.id + '">' +
       '<div class="item-top"><div style="display:flex;gap:8px;min-width:0">' +
       '<input type="checkbox" data-check="' + story.id + '"' + (state.checked[story.id] ? ' checked' : '') + '>' +
       '<div style="min-width:0"><p class="item-title">' + (story.titulo || '(sin titulo)') + '</p>' +
       '<p class="item-id">' + story.id + '</p></div></div>' +
-      '<span class="badge ok">lista</span></div>' +
+      '<span class="badge ' + badge.cls + '">' + badge.text + '</span></div>' +
       '<div class="item-meta"><span>' + (story.textLayout === 'stacked' ? 'apilado' : '2 columnas') + '</span>' +
       '<span>' + (story.background === GRADIENT ? 'fondo CSS' : 'foto') + '</span>' +
       '<button type="button" data-dup="' + story.id + '">duplicar</button>' +
@@ -163,8 +201,7 @@ function patch(partial) {
     }
     return next;
   });
-  $('#saveBtn').disabled = !isDirty();
-  $('#saveBtn').textContent = isDirty() ? 'Guardar' : 'Guardado';
+  refreshSaveState();
   renderList();
   const s = selected();
   if (s) {
@@ -231,17 +268,25 @@ async function downloadChecked() {
 
 async function importProduct(file) {
   const s = selected();
-  if (!file || !s) return;
-  setNote('Quitando fondo de ' + file.name + '…');
+  if (!file || !s || state.processingId) return;
+  state.processingId = s.id;
+  renderList();
+  refreshSaveState('Cargando ' + file.name + '…');
   try {
-    const cutout = await importProductCutout(file, function (msg) { setNote(msg); });
+    const cutout = await importProductCutout(file, function (msg) { refreshSaveState(msg); });
+    refreshSaveState('Guardando PNG…');
     const result = await uploadImage(s.id, cutout.dataUrl, 'product');
-    if (!result.ok) { setNote(result.error || 'No se pudo guardar', true); return; }
+    if (!result.ok) { refreshSaveState(result.error || 'No se pudo guardar', 'err'); return; }
     state.assetRevision = Date.now();
     patch({ productImage: result.path });
-    setNote('Fondo quitado · ' + cutout.width + '×' + cutout.height + ' px');
+    refreshSaveState('Fondo quitado · ' + cutout.width + '×' + cutout.height + ' px. Recuerda guardar la pieza.');
   } catch (err) {
-    setNote(err.message || 'No se pudo quitar el fondo', true);
+    refreshSaveState(err.message || 'No se pudo quitar el fondo', 'err');
+  } finally {
+    const keepErr = $('#saveNote').classList.contains('err');
+    state.processingId = '';
+    renderList();
+    if (!keepErr && !state.saving) refreshSaveState();
   }
 }
 
@@ -257,13 +302,24 @@ function bind() {
     };
   });
   $('#saveBtn').onclick = async function () {
-    const result = await saveStories(state.stories);
-    if (result.ok) {
-      state.baseline = JSON.stringify(state.stories);
-      $('#saveBtn').disabled = true;
-      $('#saveBtn').textContent = 'Guardado';
-      setNote('Guardado en content/products.json');
-    } else setNote(result.error || 'Error al guardar', true);
+    if (state.saving || !isDirty()) return;
+    state.saving = true;
+    refreshSaveState('Guardando cambios…');
+    renderList();
+    try {
+      const result = await saveStories(state.stories);
+      if (result.ok) {
+        state.baseline = JSON.stringify(state.stories);
+        refreshSaveState('Guardado en content/products.json');
+      } else {
+        refreshSaveState(result.error || 'Error al guardar', 'err');
+      }
+    } catch (err) {
+      refreshSaveState(err.message || 'Error al guardar', 'err');
+    }
+    state.saving = false;
+    renderList();
+    refreshSaveState($('#saveNote').textContent, $('#saveNote').classList.contains('err') ? 'err' : undefined);
   };
   $('#downloadBtn').onclick = function () { downloadChecked(); };
   $('#btnNew').onclick = function () {
@@ -273,8 +329,7 @@ function bind() {
     state.stories.push(created);
     state.selectedId = created.id;
     renderList(); fillForm(); preview();
-    $('#saveBtn').disabled = false;
-    $('#saveBtn').textContent = 'Guardar';
+    refreshSaveState();
   };
   $('#storyList').onclick = function (e) {
     const check = e.target.getAttribute && e.target.getAttribute('data-check');
@@ -292,6 +347,7 @@ function bind() {
       state.stories.push(copy);
       state.selectedId = copy.id;
       renderList(); fillForm(); preview();
+      refreshSaveState();
       return;
     }
     if (e.target.getAttribute('data-del')) {
@@ -301,6 +357,7 @@ function bind() {
       delete state.checked[id];
       if (state.selectedId === id) state.selectedId = state.stories[0] ? state.stories[0].id : '';
       renderList(); fillForm(); preview();
+      refreshSaveState();
       return;
     }
     const item = e.target.closest('.item');
@@ -355,7 +412,7 @@ function bind() {
     if (result.ok) {
       state.assetRevision = Date.now();
       patch({ originalImage: result.path });
-    } else setNote(result.error, true);
+    } else refreshSaveState(result.error, 'err');
     e.target.value = '';
   };
   $('#btnOriginal').onclick = function () { $('#fileOriginal').click(); };
@@ -378,6 +435,12 @@ function bind() {
       $('#saveBtn').click();
     }
   });
+  window.addEventListener('beforeunload', function (e) {
+    if (isDirty() || state.saving || state.processingId) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
 }
 
 async function boot() {
@@ -386,7 +449,7 @@ async function boot() {
     const loaded = await fetchStories();
     state.stories = loaded.map(function (s, i) { return normalizeStory(s, i); });
   } catch (err) {
-    setNote('No se pudo leer products.json', true);
+    refreshSaveState('No se pudo leer products.json', 'err');
     state.stories = [normalizeStory({ id: 'pieza-1' })];
   }
   state.baseline = JSON.stringify(state.stories);
@@ -396,11 +459,11 @@ async function boot() {
   if (select && state.stories.some(function (s) { return s.id === select; })) state.selectedId = select;
   else state.selectedId = state.stories[0] ? state.stories[0].id : '';
   created.forEach(function (id) { state.checked[id] = true; });
-  if (created.length) setNote(created.length + ' pieza(s) llegaron desde extract');
   $('#saveBtn').disabled = true;
   renderList();
   fillForm();
   await preview();
+  if (created.length) refreshSaveState(created.length + ' pieza(s) llegaron desde extract');
 }
 
 boot();
