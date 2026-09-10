@@ -71,8 +71,13 @@
           <div class="body">
             <label class="field"><span class="lbl">id <span class="hint">minusculas</span></span><input type="text" id="f-id"></label>
             <label class="field"><span class="lbl">Titulo <span class="hint">2 lineas</span></span><textarea id="f-titulo" rows="2"></textarea></label>
-            <label class="field"><span class="lbl">Texto A</span><textarea id="f-textoA" rows="4"></textarea></label>
-            <label class="field"><span class="lbl">Texto B</span><textarea id="f-textoB" rows="4"></textarea></label>
+            <label class="field"><span class="lbl">Texto A <span class="hint">para que sirve</span></span><textarea id="f-textoA" rows="4"></textarea></label>
+            <label class="field"><span class="lbl">Texto B <span class="hint">tamanos</span></span><textarea id="f-textoB" rows="3"></textarea></label>
+            <div class="row">
+              <button type="button" class="btn btn-primary" id="btnAi">Completar con IA</button>
+              <button type="button" class="btn" id="btnAiChecked" disabled>IA en marcadas</button>
+            </div>
+            <p class="help" id="aiHelp">ChatGPT lee la foto original y el envase: Texto A = para que sirve, Texto B = tamanos.</p>
             <label class="field"><span class="lbl">Notas</span><input type="text" id="f-notes"></label>
           </div>
         </section>

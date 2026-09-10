@@ -35,6 +35,21 @@ Luego abre http://localhost:8080/
 
 La primera vez que quites un fondo, el navegador descarga el modelo WASM (hace falta internet).
 
+## Completar textos con ChatGPT
+
+ChatGPT lee la foto original y el envase:
+
+- **Texto A:** para que sirve el producto
+- **Texto B:** tamanos (ml / g)
+
+1. Copia `api/config.sample.php` a `api/config.local.php`.
+2. Pon tu clave de OpenAI en `openai_api_key` (https://platform.openai.com/api-keys).
+3. En el editor, abre una pieza y pulsa **Completar con IA**.
+
+Tambien puedes marcar varias piezas y usar **IA en marcadas**.
+
+Si corres PHP en local, puedes exportar `OPENAI_API_KEY` en vez de crear `config.local.php`.
+
 ## Si Guardar falla
 
 - Carpeta `content/` y `assets/` deben ser escribibles por PHP.

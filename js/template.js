@@ -12,8 +12,8 @@ export const LIMITS = {
 
 export const DEFAULT_STORY = {
   titulo: 'Titulo de la pieza',
-  textoA: 'Texto de apoyo izquierdo.',
-  textoB: 'Texto de apoyo derecho.',
+  textoA: 'Para que sirve el producto.',
+  textoB: 'Tamaños:',
   productImage: '',
   background: GRADIENT,
   textLayout: 'two-col',

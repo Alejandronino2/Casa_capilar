@@ -14,6 +14,31 @@ export async function saveStories(stories) {
   return res.json();
 }
 
+export async function aiStatus() {
+  const res = await fetch('api/ai.php', { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+export async function completeStoryCopy(story) {
+  const res = await fetch('api/ai.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: story.id,
+      titulo: story.titulo,
+      notes: story.notes || '',
+      productImage: story.productImage || '',
+      originalImage: story.originalImage || '',
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error((data && data.error) || 'No se pudo completar con IA');
+  }
+  return data;
+}
+
 export async function uploadImage(id, dataUrl, type) {
   const res = await fetch('api/upload.php', {
     method: 'POST',

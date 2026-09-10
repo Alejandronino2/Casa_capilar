@@ -4,3 +4,5 @@ desktop.ini
 *.log
 .idea/
 .vscode/
+api/config.local.php
+api/config.php

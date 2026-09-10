@@ -1,5 +1,5 @@
 import { CANVAS, DEFAULT_STORY, GRADIENT, LIMITS, SAFE, normalizeStory, renderStory, ensureFonts } from './template.js';
-import { fetchStories, saveStories, uploadImage, readAsDataUrl, downloadDataUrl } from './api.js';
+import { fetchStories, saveStories, uploadImage, readAsDataUrl, downloadDataUrl, aiStatus, completeStoryCopy } from './api.js';
 import { importProductCutout } from './cutout.js';
 
 const state = {
@@ -17,6 +17,7 @@ const state = {
   exporting: false,
   saving: false,
   processingId: '',
+  aiConfigured: false,
 };
 
 const $ = function (sel) { return document.querySelector(sel); };
@@ -161,6 +162,7 @@ function renderList() {
   }).join('');
   $('#downloadBtn').textContent = 'Descargar (' + Object.keys(state.checked).filter(function (id) { return state.checked[id]; }).length + ')';
   $('#downloadBtn').disabled = !Object.keys(state.checked).some(function (id) { return state.checked[id]; }) || state.exporting;
+  updateAiButtons();
 }
 
 function fillForm() {
@@ -216,8 +218,64 @@ function patch(partial) {
       $('#f-accent').value = /^#[0-9a-f]{6}$/i.test(s.accentColor) ? s.accentColor : '#2B2B2B';
       $('#f-accent-txt').value = s.accentColor;
     }
+    if (partial.textoA !== undefined) $('#f-textoA').value = s.textoA;
+    if (partial.textoB !== undefined) $('#f-textoB').value = s.textoB;
+    if (partial.titulo !== undefined) $('#f-titulo').value = s.titulo;
   }
   preview();
+}
+
+function updateAiButtons() {
+  const busy = !!state.processingId;
+  const n = Object.keys(state.checked).filter(function (id) { return state.checked[id]; }).length;
+  const btn = $('#btnAi');
+  const batch = $('#btnAiChecked');
+  if (!btn || !batch) return;
+  btn.disabled = busy;
+  btn.textContent = busy && state.processingId === state.selectedId ? 'Leyendo foto…' : 'Completar con IA';
+  batch.disabled = busy || n === 0;
+  batch.textContent = n ? 'IA en marcadas (' + n + ')' : 'IA en marcadas';
+}
+
+function applyToStory(id, partial) {
+  state.stories = state.stories.map(function (story) {
+    if (story.id !== id) return story;
+    return normalizeStory(Object.assign({}, story, partial));
+  });
+  refreshSaveState();
+  renderList();
+  const s = selected();
+  if (s && s.id === id) {
+    if (partial.textoA !== undefined) $('#f-textoA').value = s.textoA;
+    if (partial.textoB !== undefined) $('#f-textoB').value = s.textoB;
+    preview();
+  }
+}
+
+async function completeWithAi(stories) {
+  const list = (stories || []).filter(Boolean);
+  if (!list.length || state.processingId) return;
+  if (!state.aiConfigured) {
+    refreshSaveState('Falta la clave de ChatGPT. Copia api/config.sample.php a api/config.local.php y pon openai_api_key.', 'warn');
+    return;
+  }
+  for (let i = 0; i < list.length; i += 1) {
+    const story = state.stories.find(function (s) { return s.id === list[i].id; }) || list[i];
+    state.processingId = story.id;
+    renderList();
+    refreshSaveState('IA ' + (i + 1) + '/' + list.length + ' · leyendo envase de ' + story.id + '…');
+    try {
+      const result = await completeStoryCopy(story);
+      applyToStory(story.id, { textoA: result.textoA, textoB: result.textoB });
+      refreshSaveState('IA ' + (i + 1) + '/' + list.length + ' · ' + story.id + ' listo. Revisa y guarda.');
+    } catch (err) {
+      refreshSaveState(err.message || 'Error de IA', 'err');
+      break;
+    }
+  }
+  state.processingId = '';
+  renderList();
+  if (!$('#saveNote').classList.contains('err')) refreshSaveState();
 }
 
 function updateCompare() {
@@ -397,6 +455,10 @@ function bind() {
   $('#btnGradient').onclick = function () { patch({ background: GRADIENT }); };
   $('#btnLeaves').onclick = function () { patch({ background: 'assets/backgrounds/leaves-green-vertical.jpg' }); };
   $('#btnUsePng').onclick = function () { patch({ productImage: 'assets/products/' + selected().id + '.png' }); };
+  $('#btnAi').onclick = function () { completeWithAi([selected()]); };
+  $('#btnAiChecked').onclick = function () {
+    completeWithAi(state.stories.filter(function (s) { return state.checked[s.id]; }));
+  };
   $('#fileProduct').onchange = function (e) { importProduct(e.target.files[0]); e.target.value = ''; };
   $('#btnBrowse').onclick = function () { $('#fileProduct').click(); };
   $('#dropProduct').ondragover = function (e) { e.preventDefault(); };
@@ -459,6 +521,17 @@ async function boot() {
   if (select && state.stories.some(function (s) { return s.id === select; })) state.selectedId = select;
   else state.selectedId = state.stories[0] ? state.stories[0].id : '';
   created.forEach(function (id) { state.checked[id] = true; });
+  try {
+    const status = await aiStatus();
+    state.aiConfigured = !!(status && status.configured);
+    if ($('#aiHelp')) {
+      $('#aiHelp').textContent = state.aiConfigured
+        ? 'ChatGPT listo. Lee la foto original y el envase: Texto A = para que sirve, Texto B = tamanos.'
+        : 'Falta la clave de ChatGPT. Copia api/config.sample.php a api/config.local.php y pon openai_api_key.';
+    }
+  } catch (err) {
+    state.aiConfigured = false;
+  }
   $('#saveBtn').disabled = true;
   renderList();
   fillForm();
