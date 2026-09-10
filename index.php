@@ -23,6 +23,7 @@
     </div>
     <div class="header-actions">
       <span id="saveNote" class="note"></span>
+      <button type="button" class="btn" id="undoBtn" disabled title="Volver al ultimo guardado">Deshacer</button>
       <button type="button" class="btn btn-primary" id="downloadBtn" disabled>Descargar (0)</button>
       <a class="btn" href="extract.php">Recortar producto</a>
       <button type="button" class="btn btn-primary" id="saveBtn" disabled>Guardado</button>
@@ -37,6 +38,7 @@
           <h2 id="listTitle">Piezas</h2>
         </label>
         <button type="button" class="btn" id="btnNew">+ Nueva</button>
+        <button type="button" class="btn" id="btnNewFolder" title="Nueva carpeta">+ Carpeta</button>
       </div>
       <div class="list-tabs">
         <button type="button" class="tab active" id="tabActive" data-view="active">Piezas</button>
@@ -46,6 +48,9 @@
         <button type="button" class="btn btn-danger" id="btnTrashChecked" disabled>A borrados (0)</button>
         <button type="button" class="btn hidden" id="btnRestoreChecked" disabled>Restaurar (0)</button>
         <button type="button" class="btn btn-danger hidden" id="btnPurgeChecked" disabled>Eliminar (0)</button>
+        <select id="bulkFolder" class="bulk-folder" title="Mover marcadas a carpeta">
+          <option value="">Mover a…</option>
+        </select>
       </div>
       <ul class="list" id="storyList"></ul>
     </aside>
@@ -79,14 +84,21 @@
           <h2>Contenido</h2>
           <div class="body">
             <label class="field"><span class="lbl">id <span class="hint">minusculas</span></span><input type="text" id="f-id"></label>
+            <label class="field"><span class="lbl">Carpeta / marca</span>
+              <select id="f-folder"></select>
+            </label>
             <label class="field"><span class="lbl">Titulo <span class="hint">2 lineas</span></span><textarea id="f-titulo" rows="2"></textarea></label>
-            <label class="field"><span class="lbl">Texto A <span class="hint">para que sirve</span></span><textarea id="f-textoA" rows="4"></textarea></label>
+            <label class="field"><span class="lbl">Hook <span class="hint">frase comercial bajo el titulo</span></span><input type="text" id="f-hook" placeholder="Nutrición + brillo para tu cabello"></label>
+            <label class="field"><span class="lbl">Texto A <span class="hint">venta / beneficio</span></span><textarea id="f-textoA" rows="4"></textarea></label>
             <label class="field"><span class="lbl">Texto B <span class="hint">tamanos</span></span><textarea id="f-textoB" rows="3"></textarea></label>
+            <label class="field"><span class="lbl">CTA <span class="hint">vacio = sin boton</span></span><input type="text" id="f-cta" placeholder="COMPRAR →"></label>
             <div class="row">
               <button type="button" class="btn btn-primary" id="btnAi">Completar con IA</button>
               <button type="button" class="btn" id="btnAiChecked" disabled>IA en marcadas</button>
             </div>
-            <p class="help" id="aiHelp">ChatGPT lee la foto original y el envase: Texto A = para que sirve, Texto B = tamanos.</p>
+            <label class="ai-photo"><input type="checkbox" id="chkAiTitle" checked> También ajustar título</label>
+            <label class="ai-photo"><input type="checkbox" id="chkAiPhoto" checked> Leer foto del envase (titulo real)</label>
+            <p class="help" id="aiHelp">La IA lee la foto del producto para poner un titulo real + texto de venta.</p>
             <label class="field"><span class="lbl">Notas</span><input type="text" id="f-notes"></label>
           </div>
         </section>
@@ -108,6 +120,7 @@
               <button type="button" class="btn" id="btnLeaves">Foto hojas</button>
             </div>
             <div class="brand-grid" id="brandBgGrid" aria-label="Fondos de marca"></div>
+            <p class="help">Clic en un fondo: aplica a la pieza actual, o a todas las marcadas si hay checks. Clic en el nombre de una carpeta: aplica el fondo de esa marca a toda la carpeta.</p>
             <label class="field"><span class="lbl">Original 16:9</span><input type="text" id="f-original"></label>
           </div>
         </section>
@@ -120,18 +133,24 @@
                 <option value="stacked">stacked · uno sobre otro</option>
               </select>
             </label>
-            <label class="field"><span class="lbl">productScale <span class="hint" id="f-scale-val">1.00×</span></span>
-              <input type="range" id="f-scale" min="0.4" max="1.6" step="0.01" value="1"></label>
-            <label class="field"><span class="lbl">productOffsetY <span class="hint" id="f-off-val">0px</span></span>
+            <label class="field"><span class="lbl">Producto · tamaño <span class="hint" id="f-scale-val">1.40×</span></span>
+              <input type="range" id="f-scale" min="0.4" max="2.2" step="0.01" value="1.4"></label>
+            <label class="field"><span class="lbl">Producto · horizontal <span class="hint" id="f-offx-val">0px</span></span>
+              <input type="range" id="f-offx" min="-280" max="280" step="1" value="0"></label>
+            <label class="field"><span class="lbl">Producto · vertical <span class="hint" id="f-off-val">0px</span></span>
               <input type="range" id="f-off" min="-260" max="260" step="1" value="0"></label>
-            <label class="field"><span class="lbl">titleSize <span class="hint" id="f-title-val">78px</span></span>
-              <input type="range" id="f-title" min="40" max="120" step="1" value="78"></label>
-            <label class="field"><span class="lbl">bodySize <span class="hint" id="f-body-val">34px</span></span>
-              <input type="range" id="f-body" min="20" max="56" step="1" value="34"></label>
+            <label class="field"><span class="lbl">Beneficios/texto · vertical <span class="hint" id="f-text-offy-val">0px</span></span>
+              <input type="range" id="f-text-offy" min="-220" max="220" step="1" value="0"></label>
+            <label class="field"><span class="lbl">Beneficios/texto · horizontal <span class="hint" id="f-text-offx-val">0px</span></span>
+              <input type="range" id="f-text-offx" min="-120" max="120" step="1" value="0"></label>
+            <label class="field"><span class="lbl">Titulo · tamaño <span class="hint" id="f-title-val">72px</span></span>
+              <input type="range" id="f-title" min="36" max="120" step="1" value="72"></label>
+            <label class="field"><span class="lbl">Cuerpo · tamaño <span class="hint" id="f-body-val">26px</span></span>
+              <input type="range" id="f-body" min="18" max="56" step="1" value="26"></label>
             <label class="field"><span class="lbl">accentColor</span>
               <div class="row">
-                <input type="color" id="f-accent" value="#2B2B2B">
-                <input type="text" id="f-accent-txt" value="#2B2B2B">
+                <input type="color" id="f-accent" value="#F27F83">
+                <input type="text" id="f-accent-txt" value="#F27F83">
               </div>
             </label>
           </div>

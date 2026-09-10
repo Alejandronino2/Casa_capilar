@@ -1,0 +1,9 @@
+[
+  { "id": "pocion", "name": "Poción", "locked": true },
+  { "id": "click-hair", "name": "Click Hair", "locked": true },
+  { "id": "herbacol", "name": "HERBACOL", "locked": true },
+  { "id": "bell-franz", "name": "Bell Franz", "locked": true },
+  { "id": "anyeluz", "name": "anyeluz", "locked": true },
+  { "id": "origen-botanico", "name": "Origen Botánico", "locked": true },
+  { "id": "sin-carpeta", "name": "Sin carpeta", "locked": true }
+]

@@ -1,4 +1,4 @@
-import { uploadImage, fetchStories, saveStories, readAsDataUrl, downloadDataUrl, trimTransparent } from './api.js';
+import { uploadImage, fetchStories, saveStories, readAsDataUrl, downloadDataUrl, trimTransparent, fetchFolders } from './api.js';
 import { cutoutImage } from './cutout.js';
 import { DEFAULT_STORY, normalizeStory } from './template.js';
 
@@ -7,6 +7,16 @@ let counter = 0;
 const trim = { enabled: true, threshold: 8, padding: 2 };
 let sending = false;
 let processing = false;
+let folders = [];
+
+const BRAND_BG = {
+  pocion: 'assets/backgrounds/brand-pocion.jpg',
+  'click-hair': 'assets/backgrounds/brand-click-hair.jpg',
+  herbacol: 'assets/backgrounds/brand-herbacol.jpg',
+  'bell-franz': 'assets/backgrounds/brand-bell-franz.jpg',
+  anyeluz: 'assets/backgrounds/brand-anyeluz.jpg',
+  'origen-botanico': 'assets/backgrounds/brand-origen-botanico.jpg',
+};
 
 function slugify(value) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -273,9 +283,55 @@ document.getElementById('btnProcess').onclick = function () {
   processPending();
 };
 
+function selectedFolder() {
+  const main = document.getElementById('extractFolder');
+  const side = document.getElementById('extractFolderSide');
+  return (main && main.value) || (side && side.value) || 'sin-carpeta';
+}
+
+function fillFolderSelects() {
+  const html = folders.map(function (f) {
+    return '<option value="' + f.id + '">' + f.name + '</option>';
+  }).join('');
+  ['extractFolder', 'extractFolderSide'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const prev = el.value || 'sin-carpeta';
+    el.innerHTML = html || '<option value="sin-carpeta">Sin carpeta</option>';
+    if (folders.some(function (f) { return f.id === prev; })) el.value = prev;
+  });
+}
+
+function syncFolderSelects(fromId) {
+  const value = selectedFolder();
+  ['extractFolder', 'extractFolderSide'].forEach(function (id) {
+    if (id === fromId) return;
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  });
+}
+
+async function loadFolders() {
+  try {
+    folders = await fetchFolders();
+  } catch (err) {
+    folders = [
+      { id: 'pocion', name: 'Poción' },
+      { id: 'click-hair', name: 'Click Hair' },
+      { id: 'herbacol', name: 'HERBACOL' },
+      { id: 'bell-franz', name: 'Bell Franz' },
+      { id: 'anyeluz', name: 'anyeluz' },
+      { id: 'origen-botanico', name: 'Origen Botánico' },
+      { id: 'sin-carpeta', name: 'Sin carpeta' },
+    ];
+  }
+  fillFolderSelects();
+}
+
 async function sendToEditor() {
   if (!items.length || sending || processing) return;
   sending = true;
+  const folder = selectedFolder();
   const note = document.getElementById('sendNote');
   note.className = 'note';
   note.textContent = 'Procesando imagenes pendientes…';
@@ -290,6 +346,7 @@ async function sendToEditor() {
     const taken = {};
     stories.forEach(function (s) { taken[s.id] = true; });
     const created = [];
+    const bg = BRAND_BG[folder] || DEFAULT_STORY.background;
 
     for (let i = 0; i < ready.length; i += 1) {
       const item = ready[i];
@@ -297,7 +354,7 @@ async function sendToEditor() {
       item.progress = 'Enviando al editor…';
       render();
       note.textContent = 'Enviando ' + (i + 1) + '/' + ready.length + '… ' + item.id;
-      setProcessNote('Enviando ' + (i + 1) + '/' + ready.length + ' · ' + item.id);
+      setProcessNote('Enviando ' + (i + 1) + '/' + ready.length + ' · ' + item.id + ' → ' + folder);
       const id = uniqueId(item.id, taken);
       taken[id] = true;
       item.id = id;
@@ -319,18 +376,21 @@ async function sendToEditor() {
         textoA: DEFAULT_STORY.textoA,
         textoB: DEFAULT_STORY.textoB,
         productImage: saved.path,
-        background: DEFAULT_STORY.background,
+        background: bg,
         originalImage: item.originalPath || '',
         notes: 'Creada desde extract: ' + item.file.name,
+        folder: folder,
       }, stories.length + created.length);
       created.push(story);
     }
 
     const result = await saveStories(stories.concat(created));
     if (!result.ok) throw new Error(result.error || 'No se pudieron guardar las piezas');
-    note.textContent = created.length + ' pieza(s) listas. Abriendo editor…';
+    note.textContent = created.length + ' pieza(s) listas en «' + folder + '». Abriendo editor…';
     setProcessNote('Listo. Abriendo editor…');
-    window.location.href = 'index.php?select=' + encodeURIComponent(created[0].id) + '&created=' + encodeURIComponent(created.map(function (s) { return s.id; }).join(','));
+    window.location.href = 'index.php?select=' + encodeURIComponent(created[0].id) +
+      '&created=' + encodeURIComponent(created.map(function (s) { return s.id; }).join(',')) +
+      '&folder=' + encodeURIComponent(folder);
   } catch (err) {
     note.textContent = err.message || String(err);
     note.className = 'note err';
@@ -345,6 +405,11 @@ async function sendToEditor() {
 
 document.getElementById('btnToEditor').onclick = function () { sendToEditor(); };
 document.getElementById('btnToEditor2').onclick = function () { sendToEditor(); };
+['extractFolder', 'extractFolderSide'].forEach(function (id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.onchange = function () { syncFolderSelects(id); };
+});
 document.getElementById('zone').ondragover = function (e) { e.preventDefault(); };
 document.getElementById('zone').ondrop = function (e) { e.preventDefault(); addFiles(e.dataTransfer.files); };
 document.getElementById('cards').onclick = function (e) {
@@ -397,4 +462,4 @@ window.addEventListener('beforeunload', function (e) {
   }
 });
 
-updateToolbar();
+loadFolders().then(function () { updateToolbar(); }).catch(function () { updateToolbar(); });

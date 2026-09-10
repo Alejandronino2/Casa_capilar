@@ -3,6 +3,10 @@ require __DIR__ . '/helpers.php';
 
 function ai_config() {
   $cfg = array(
+    'ai_provider' => getenv('AI_PROVIDER') ? getenv('AI_PROVIDER') : 'auto',
+    'groq_api_key' => getenv('GROQ_API_KEY') ? getenv('GROQ_API_KEY') : '',
+    'groq_model' => getenv('GROQ_MODEL') ? getenv('GROQ_MODEL') : 'openai/gpt-oss-20b',
+    'groq_vision_model' => getenv('GROQ_VISION_MODEL') ? getenv('GROQ_VISION_MODEL') : 'qwen/qwen3.6-27b',
     'openai_api_key' => getenv('OPENAI_API_KEY') ? getenv('OPENAI_API_KEY') : '',
     'openai_model' => getenv('OPENAI_MODEL') ? getenv('OPENAI_MODEL') : 'gpt-4o-mini',
   );
@@ -16,29 +20,73 @@ function ai_config() {
   return $cfg;
 }
 
-function ai_prompt($titulo, $notes) {
-  return "Eres redactor de stories 1080x1920 para Casa Capilar (productos Anyeluz y similares).\n\n" .
-    "Titulo de la pieza: " . $titulo . "\n" .
-    "Notas: " . ($notes !== '' ? $notes : '(sin notas)') . "\n\n" .
-    "Mira las fotos (pieza original 16:9 y/o el envase). Extrae el texto visible de la etiqueta y de la pieza original.\n\n" .
-    "Devuelve SOLO un JSON con estas claves:\n" .
-    "{\n" .
-    "  \"textoA\": \"para que sirve el producto\",\n" .
-    "  \"textoB\": \"Tamaños:\\n500 ml\",\n" .
-    "  \"tamanos\": [\"500 ml\"]\n" .
-    "}\n\n" .
-    "Reglas:\n" .
-    "- textoA (primera descripcion, izquierda): para que sirve / beneficio. 1 o 2 frases cortas, maximo 140 caracteres. Español. Sin tamaños ni ml.\n" .
-    "- textoB (segunda descripcion, derecha): SOLO presentaciones. Formato exacto:\n" .
-    "Tamaños:\n" .
-    "800 ml\n" .
-    "- Lee los ml, g u oz del envase o de la pieza. Si hay varios envases con el mismo tamaño, no lo repitas. Si hay tamaños distintos, uno por linea.\n" .
-    "- Si es un set, lista los tamaños de cada producto (ej. 500 ml). Si no ves el tamaño, escribe \"Tamaños:\\nConsultar presentación\".\n" .
-    "- No inventes mililitros. Prefiere lo que se lee en la foto.\n" .
-    "- Tono comercial breve, como las piezas Anyeluz. Sin hashtags ni markdown.";
+function ai_resolve_provider($cfg) {
+  $want = strtolower(trim((string) (isset($cfg['ai_provider']) ? $cfg['ai_provider'] : 'auto')));
+  if ($want === 'groq' && !empty($cfg['groq_api_key'])) return 'groq';
+  if ($want === 'openai' && !empty($cfg['openai_api_key'])) return 'openai';
+  if ($want === 'auto' || $want === '') {
+    if (!empty($cfg['groq_api_key'])) return 'groq';
+    if (!empty($cfg['openai_api_key'])) return 'openai';
+  }
+  return null;
 }
 
-function encode_asset_image($rel) {
+function title_hint_from_paths($product, $original, $id) {
+  foreach (array($product, $original, $id) as $raw) {
+    $base = pathinfo(basename(str_replace('\\', '/', (string) $raw)), PATHINFO_FILENAME);
+    if ($base === '') continue;
+    $base = preg_replace('/^[0-9]+-/', '', $base);
+    if (preg_match('/whatsapp|photoroom|screenshot|img[-_]?[0-9]*$/i', $base) && preg_match('/\d{4}|photoroom/i', $base)) {
+      continue;
+    }
+    $parts = preg_split('/[-_]+/', $base);
+    $words = array();
+    foreach ($parts as $w) {
+      $w = trim((string) $w);
+      if ($w === '') continue;
+      if (preg_match('/^\d+$/', $w)) continue;
+      if (preg_match('/^[a-f0-9]{8,}$/i', $w)) continue;
+      if (preg_match('/^(photoroom|whatsapp|listing|image|img|foto|copy|final|at|pm|am)$/i', $w)) continue;
+      $words[] = $w;
+    }
+    if (count($words) >= 2) {
+      return implode(' ', $words);
+    }
+  }
+  return '';
+}
+
+function titulo_parece_basura($titulo, $marca) {
+  $t = trim((string) $titulo);
+  if ($t === '') return true;
+  if (preg_match('/whatsapp|photoroom|screenshot|\d{4}[-_]\d{2}/i', $t)) return true;
+  if (preg_match('/^producto\b/iu', $t)) return true;
+  $marca = trim((string) $marca);
+  if ($marca !== '' && function_exists('mb_strtolower')) {
+    if (mb_strtolower($t, 'UTF-8') === mb_strtolower($marca, 'UTF-8')) return true;
+  }
+  return false;
+}
+
+function ai_prompt($marca, $titulo, $notes, $hint, $hasPhoto) {
+  $marca = $marca !== '' ? $marca : 'sin marca';
+  $titulo = $titulo !== '' ? $titulo : 'producto';
+  $lines = array();
+  $lines[] = 'Venta Casa Capilar. Marca: ' . $marca . '.';
+  if ($hasPhoto) {
+    $lines[] = 'Lee la FOTO del envase y saca el nombre real del producto.';
+  } else {
+    $lines[] = 'Nombre actual: ' . $titulo . '.';
+    if ($hint !== '') $lines[] = 'Pista archivo: ' . $hint . '.';
+  }
+  if ($notes !== '') $lines[] = 'Notas: ' . $notes . '.';
+  $lines[] = 'Responde SOLO este JSON (una linea, sin think, sin markdown):';
+  $lines[] = '{"titulo":"NOMBRE MAYUSCULAS SIN NUMEROS","textoA":"copy venta max 120 chars","textoB":"Tamaños:\\nConsultar presentación","tamanos":["Consultar presentación"]}';
+  $lines[] = 'titulo = nombre del producto (no solo la marca, no PRODUCTO...). Si ves ml en foto usalos en textoB.';
+  return implode(' ', $lines);
+}
+
+function encode_asset_image($rel, $compact) {
   $rel = str_replace('\\', '/', (string) $rel);
   if ($rel === '' || strpos($rel, '..') !== false) return null;
   if (!preg_match('#^assets/(products|originals)/[A-Za-z0-9._-]+$#', $rel)) return null;
@@ -61,7 +109,8 @@ function encode_asset_image($rel) {
   if (!$src) return null;
   $w = imagesx($src);
   $h = imagesy($src);
-  $max = 1280;
+  $max = $compact ? 512 : 960;
+  $quality = $compact ? 48 : 62;
   $scale = min(1, $max / max($w, $h));
   $nw = max(1, (int) round($w * $scale));
   $nh = max(1, (int) round($h * $scale));
@@ -70,7 +119,7 @@ function encode_asset_image($rel) {
   imagefilledrectangle($dst, 0, 0, $nw, $nh, $white);
   imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
   ob_start();
-  imagejpeg($dst, null, 72);
+  imagejpeg($dst, null, $quality);
   $jpeg = ob_get_clean();
   imagedestroy($src);
   imagedestroy($dst);
@@ -92,7 +141,7 @@ function http_post_json($url, $payload, $headers) {
   curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
   curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
   curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-  curl_setopt($ch, CURLOPT_TIMEOUT, 90);
+  curl_setopt($ch, CURLOPT_TIMEOUT, 120);
   curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 20);
   $raw = curl_exec($ch);
   $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -106,6 +155,12 @@ function http_post_json($url, $payload, $headers) {
 
 function parse_model_json($text) {
   $text = trim((string) $text);
+  $text = preg_replace('/<think>.*?<\/think>/is', '', $text);
+  // Si se corto a mitad del think, descarta el bloque abierto
+  if (stripos($text, '<think>') !== false) {
+    $text = preg_replace('/<think>.*$/is', '', $text);
+  }
+  $text = trim($text);
   if (preg_match('/```(?:json)?\s*(\{.*\})\s*```/s', $text, $m)) {
     $text = $m[1];
   }
@@ -113,7 +168,10 @@ function parse_model_json($text) {
   $end = strrpos($text, '}');
   if ($start === false || $end === false || $end <= $start) return null;
   $decoded = json_decode(substr($text, $start, $end - $start + 1), true);
-  return is_array($decoded) ? $decoded : null;
+  if (!is_array($decoded)) return null;
+  // Acepta si trae al menos titulo o textoA
+  if (!isset($decoded['titulo']) && !isset($decoded['textoA'])) return null;
+  return $decoded;
 }
 
 function format_texto_b($value, $tamanos) {
@@ -151,34 +209,97 @@ function clip_texto($text, $max) {
   return $text;
 }
 
-function openai_complete($cfg, $prompt, $images) {
+function clip_titulo($text) {
+  $text = str_replace(array("\r\n", "\r"), "\n", (string) $text);
+  $text = preg_replace("/[ \t]+/u", ' ', $text);
+  $text = preg_replace("/\n{2,}/u", "\n", $text);
+  $text = trim($text);
+  $lines = array();
+  foreach (explode("\n", $text) as $line) {
+    $line = trim($line);
+    // Quitar digitos y restos como " #" o " -" al final
+    $line = preg_replace('/\d+/u', '', $line);
+    $line = preg_replace('/\s+/u', ' ', $line);
+    $line = preg_replace('/\s*([#\-\/|,.;:])\s*/u', ' ', $line);
+    $line = trim($line, " \t-_/|,.;:#");
+    if ($line !== '') $lines[] = $line;
+  }
+  if (count($lines) > 2) $lines = array_slice($lines, 0, 2);
+  $out = implode("\n", $lines);
+  if (function_exists('mb_strtoupper')) {
+    $out = mb_strtoupper($out, 'UTF-8');
+  } else {
+    $out = strtoupper($out);
+  }
+  if (function_exists('mb_strlen') && mb_strlen($out, 'UTF-8') > 90) {
+    $out = rtrim(mb_substr($out, 0, 89, 'UTF-8')) . '…';
+  } elseif (strlen($out) > 90) {
+    $out = rtrim(substr($out, 0, 89)) . '…';
+  }
+  return $out;
+}
+
+function openai_compat_complete($url, $apiKey, $model, $prompt, $images, $label, $options) {
+  $options = is_array($options) ? $options : array();
+  $useJsonMode = !empty($options['json_mode']);
+  $maxTokens = isset($options['max_tokens']) ? (int) $options['max_tokens'] : 280;
+  $useImages = $images && count($images) > 0;
   $content = array(array('type' => 'text', 'text' => $prompt));
   foreach ($images as $img) {
     $content[] = array(
       'type' => 'image_url',
-      'image_url' => array('url' => 'data:' . $img['mime'] . ';base64,' . $img['b64']),
+      'image_url' => array(
+        'url' => 'data:' . $img['mime'] . ';base64,' . $img['b64'],
+        'detail' => 'low',
+      ),
     );
   }
-  $res = http_post_json(
-    'https://api.openai.com/v1/chat/completions',
-    array(
-      'model' => $cfg['openai_model'],
-      'temperature' => 0.2,
-      'response_format' => array('type' => 'json_object'),
-      'messages' => array(
-        array('role' => 'system', 'content' => 'Respondes solo JSON valido, sin markdown.'),
-        array('role' => 'user', 'content' => $content),
-      ),
+  $payload = array(
+    'model' => $model,
+    'temperature' => isset($options['temperature']) ? $options['temperature'] : 0.2,
+    'max_tokens' => $maxTokens,
+    'messages' => array(
+      array('role' => 'system', 'content' => 'Solo JSON valido. Sin razonamiento. Sin markdown.'),
+      array('role' => 'user', 'content' => $useImages ? $content : $prompt),
     ),
-    array('Authorization: Bearer ' . $cfg['openai_api_key'])
   );
+  if ($useJsonMode) {
+    $payload['response_format'] = array('type' => 'json_object');
+  }
+  if (isset($options['reasoning_effort']) && $options['reasoning_effort'] !== '') {
+    $payload['reasoning_effort'] = $options['reasoning_effort'];
+  }
+
+  $res = http_post_json($url, $payload, array('Authorization: Bearer ' . $apiKey));
   $parsed = json_decode($res['raw'], true);
   if ($res['code'] >= 400) {
-    $msg = 'OpenAI rechazo la peticion';
+    $msg = $label . ' rechazo la peticion';
     if (is_array($parsed) && isset($parsed['error']['message'])) $msg = $parsed['error']['message'];
     $low = strtolower($msg);
-    if (strpos($low, 'credit') !== false || strpos($low, 'quota') !== false || strpos($low, 'billing') !== false) {
-      $msg = 'ChatGPT no tiene credito. Recarga la cuenta de OpenAI en platform.openai.com.';
+    if (strpos($low, 'rate limit') !== false || strpos($low, 'tokens per minute') !== false || strpos($low, 'tpm') !== false) {
+      $retryAfter = 20;
+      if (preg_match('/try again in\s+([0-9.]+)\s*s/i', $msg, $m)) {
+        $retryAfter = (int) ceil((float) $m[1]) + 1;
+      }
+      if ($retryAfter < 3) $retryAfter = 3;
+      if ($retryAfter > 120) $retryAfter = 120;
+      json_out(429, array(
+        'ok' => false,
+        'error' => 'Groq llego al limite por minuto. Espera ' . $retryAfter . ' segundos.',
+        'rateLimited' => true,
+        'retryAfter' => $retryAfter,
+      ));
+    } elseif (strpos($low, 'credit') !== false || strpos($low, 'quota') !== false || strpos($low, 'billing') !== false) {
+      if ($label === 'OpenAI') {
+        $msg = 'ChatGPT no tiene credito. Usa Groq gratis: pon groq_api_key en api/config.local.php (console.groq.com).';
+      } else {
+        json_out(429, array(
+          'ok' => false,
+          'error' => 'Groq alcanzo el limite gratuito. Espera 60 segundos.',
+          'rateLimited' => true,
+          'retryAfter' => 60,
+        ));
+      }
     }
     json_out(502, array('ok' => false, 'error' => $msg));
   }
@@ -189,14 +310,50 @@ function openai_complete($cfg, $prompt, $images) {
   return $text;
 }
 
+function ai_complete($provider, $cfg, $prompt, $images) {
+  if ($provider === 'groq') {
+    $useVision = $images && count($images) > 0;
+    $model = $useVision
+      ? (isset($cfg['groq_vision_model']) && $cfg['groq_vision_model'] !== '' ? $cfg['groq_vision_model'] : 'qwen/qwen3.6-27b')
+      : $cfg['groq_model'];
+    $opts = array(
+      'json_mode' => false,
+      'max_tokens' => $useVision ? 450 : 500,
+      'temperature' => 0.1,
+    );
+    // qwen: none = sin think (evita cortar el JSON). gpt-oss: low
+    $opts['reasoning_effort'] = $useVision ? 'none' : 'low';
+    return openai_compat_complete(
+      'https://api.groq.com/openai/v1/chat/completions',
+      $cfg['groq_api_key'],
+      $model,
+      $prompt,
+      $useVision ? $images : array(),
+      'Groq',
+      $opts
+    );
+  }
+  return openai_compat_complete(
+    'https://api.openai.com/v1/chat/completions',
+    $cfg['openai_api_key'],
+    $cfg['openai_model'],
+    $prompt,
+    $images,
+    'OpenAI',
+    array('json_mode' => true, 'max_tokens' => 220)
+  );
+}
+
 $cfg = ai_config();
-$configured = !empty($cfg['openai_api_key']);
+$provider = ai_resolve_provider($cfg);
+$configured = $provider !== null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
   json_out(200, array(
     'ok' => true,
     'configured' => $configured,
-    'provider' => $configured ? 'chatgpt' : null,
+    'provider' => $provider,
+    'free' => $provider === 'groq',
   ));
 }
 
@@ -208,39 +365,80 @@ if (!$configured) {
   json_out(501, array(
     'ok' => false,
     'configured' => false,
-    'error' => 'Falta la clave de ChatGPT. Copia api/config.sample.php a api/config.local.php y pon openai_api_key.',
+    'error' => 'Falta clave de IA. Copia api/config.sample.php a api/config.local.php y pon groq_api_key (gratis en console.groq.com).',
   ));
 }
 
 $body = read_json_body();
 $titulo = isset($body['titulo']) ? trim((string) $body['titulo']) : '';
 $notes = isset($body['notes']) ? trim((string) $body['notes']) : '';
+$marca = isset($body['marca']) ? trim((string) $body['marca']) : '';
+$folder = isset($body['folder']) ? trim((string) $body['folder']) : '';
+$id = isset($body['id']) ? trim((string) $body['id']) : '';
+if ($marca === '' && $folder !== '' && $folder !== 'sin-carpeta') $marca = $folder;
 $product = isset($body['productImage']) ? $body['productImage'] : '';
 $original = isset($body['originalImage']) ? $body['originalImage'] : '';
+$usePhoto = array_key_exists('usePhoto', $body) ? !empty($body['usePhoto']) : true;
+
+$hint = title_hint_from_paths($product, $original, $id);
 
 $images = array();
-$orig = encode_asset_image($original);
-$prod = encode_asset_image($product);
-if ($orig) $images[] = $orig;
-if ($prod) $images[] = $prod;
-
-$prompt = ai_prompt($titulo, $notes);
-$rawText = openai_complete($cfg, $prompt, $images);
-
-$data = parse_model_json($rawText);
-if (!$data) {
-  json_out(502, array('ok' => false, 'error' => 'ChatGPT no devolvio un JSON usable'));
+if ($usePhoto) {
+  $prod = encode_asset_image($product, true);
+  $orig = encode_asset_image($original, true);
+  if ($prod) $images[] = $prod;
+  elseif ($orig) $images[] = $orig;
 }
 
-$textoA = clip_texto(isset($data['textoA']) ? $data['textoA'] : '', 160);
+// Si el titulo es basura y hay imagen, forzar foto aunque el check venga apagado
+if (!$images && titulo_parece_basura($titulo, $marca)) {
+  $prod = encode_asset_image($product, true);
+  $orig = encode_asset_image($original, true);
+  if ($prod) $images[] = $prod;
+  elseif ($orig) $images[] = $orig;
+}
+
+$hasPhoto = count($images) > 0;
+$prompt = ai_prompt($marca, $titulo, $notes, $hint, $hasPhoto);
+
+$rawText = ai_complete($provider, $cfg, $prompt, $images);
+$data = parse_model_json($rawText);
+
+// Reintento sin foto (mas estable) si la vision corto el JSON
+if (!$data && $hasPhoto) {
+  $prompt2 = ai_prompt($marca, $titulo, $notes, $hint, false);
+  $rawText = ai_complete($provider, $cfg, $prompt2, array());
+  $data = parse_model_json($rawText);
+}
+
+if (!$data) {
+  // Ultimo recurso: titulo desde archivo + venta generica
+  if ($hint !== '') {
+    $data = array(
+      'titulo' => $hint,
+      'textoA' => 'Descubre este producto ' . $marca . ': resultado visible y cuidado que se nota desde el primer uso.',
+      'textoB' => "Tamaños:\nConsultar presentación",
+      'tamanos' => array('Consultar presentación'),
+    );
+  } else {
+    json_out(502, array('ok' => false, 'error' => 'La IA no devolvio un JSON usable. Espera unos segundos e intenta de nuevo.'));
+  }
+}
+
+$textoA = clip_texto(isset($data['textoA']) ? $data['textoA'] : '', 180);
 $textoB = format_texto_b(isset($data['textoB']) ? $data['textoB'] : '', isset($data['tamanos']) ? $data['tamanos'] : array());
+$tituloOut = clip_titulo(isset($data['titulo']) ? $data['titulo'] : '');
+if ($tituloOut === '' && $hint !== '') $tituloOut = clip_titulo($hint);
+if ($tituloOut === '') $tituloOut = clip_titulo($titulo);
 if ($textoA === '') {
-  json_out(502, array('ok' => false, 'error' => 'ChatGPT no pudo escribir para que sirve el producto'));
+  json_out(502, array('ok' => false, 'error' => 'La IA no pudo escribir para que sirve el producto'));
 }
 
 json_out(200, array(
   'ok' => true,
+  'titulo' => $tituloOut,
   'textoA' => $textoA,
   'textoB' => $textoB,
-  'provider' => 'chatgpt',
+  'provider' => $provider,
+  'mode' => $hasPhoto ? 'photo' : 'text',
 ));

@@ -42,7 +42,8 @@ export async function aiStatus() {
   return res.json();
 }
 
-export async function completeStoryCopy(story) {
+export async function completeStoryCopy(story, options) {
+  options = options || {};
   const res = await fetch('api/ai.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -50,14 +51,51 @@ export async function completeStoryCopy(story) {
       id: story.id,
       titulo: story.titulo,
       notes: story.notes || '',
+      folder: story.folder || '',
+      marca: options.marca || story.folder || '',
       productImage: story.productImage || '',
       originalImage: story.originalImage || '',
+      usePhoto: !!options.usePhoto,
     }),
   });
   const data = await res.json();
   if (!res.ok || !data.ok) {
-    throw new Error((data && data.error) || 'No se pudo completar con IA');
+    const err = new Error((data && data.error) || 'No se pudo completar con IA');
+    if (data && data.rateLimited) {
+      err.rateLimited = true;
+      err.retryAfter = Math.max(3, Number(data.retryAfter) || 20);
+    }
+    throw err;
   }
+  return data;
+}
+
+export async function fetchFolders() {
+  const res = await fetch('api/folders.php', { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  return (data && data.folders) ? data.folders : [];
+}
+
+export async function createFolder(name) {
+  const res = await fetch('api/folders.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'create', name: name }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo crear carpeta');
+  return data;
+}
+
+export async function deleteFolder(id) {
+  const res = await fetch('api/folders.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'delete', id: id }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo borrar carpeta');
   return data;
 }
 

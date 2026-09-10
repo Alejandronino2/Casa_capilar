@@ -12,6 +12,10 @@
     <h1>Recorte de producto <span>fondo fuera con WASM, en el navegador</span></h1>
     <div class="header-actions">
       <span id="processNote" class="note"></span>
+      <label class="extract-folder-label">
+        <span>Carpeta</span>
+        <select id="extractFolder" title="Carpeta / marca destino"></select>
+      </label>
       <button type="button" class="btn" id="btnAdd">Anadir imagenes</button>
       <button type="button" class="btn btn-primary" id="btnProcess">Procesar todo</button>
       <button type="button" class="btn btn-primary" id="btnToEditor" disabled>Enviar al editor</button>
@@ -46,13 +50,16 @@
           <h2>Lote</h2>
           <div class="body">
             <p id="batchInfo" class="help">0 en cola</p>
+            <label class="field"><span class="lbl">Enviar a carpeta / marca</span>
+              <select id="extractFolderSide"></select>
+            </label>
             <div class="row">
               <button type="button" class="btn" id="btnDlAll">Descargar todos</button>
               <button type="button" class="btn btn-primary" id="btnSaveAll">Guardar todos</button>
               <button type="button" class="btn btn-primary" id="btnToEditor2" disabled>Enviar al editor</button>
               <button type="button" class="btn btn-danger" id="btnClear">Vaciar cola</button>
             </div>
-            <p class="help">«Enviar al editor» quita el fondo si falta, guarda cada PNG y crea una pieza nueva en el editor.</p>
+            <p class="help">«Enviar al editor» quita el fondo si falta, guarda cada PNG y crea piezas en la carpeta elegida.</p>
             <p id="sendNote" class="note"></p>
           </div>
         </section>
