@@ -767,27 +767,57 @@ async function downloadChecked() {
   state.exporting = true;
   renderList();
   const hold = $('#exportHost');
-  hold.style.cssText = 'position:fixed;left:-2000px;top:0;width:1080px;height:1920px;overflow:hidden;pointer-events:none;z-index:-1';
+  // Host de export a escala 1:1; html-to-image sube calidad con pixelRatio
+  hold.style.cssText = 'position:fixed;left:-10000px;top:0;width:' + CANVAS.width + 'px;height:' + CANVAS.height + 'px;overflow:hidden;pointer-events:none;z-index:-1;opacity:1';
   await ensureFonts();
+  const htmlToImage = await import('https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/+esm');
+  const EXPORT_RATIO = 2; // 2160×3840 PNG (alta calidad; Instagram/redes reescalan bien)
+
   for (let i = 0; i < queued.length; i += 1) {
     setNote('Descargando ' + (i + 1) + '/' + queued.length + '… ' + queued[i].id);
     await renderStory(hold, queued[i], { autoFit: true, showGuides: false, showSafeZones: false });
-    const htmlToImage = await import('https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/+esm');
     const canvas = hold.querySelector('#story-canvas');
     // Cinturon de seguridad: nunca exportar guías de zona segura
     canvas.querySelectorAll('[data-guides], [data-safe-zones]').forEach(function (el) { el.remove(); });
+
+    // Esperar imagenes + fuentes antes de capturar
+    const imgs = Array.prototype.slice.call(canvas.querySelectorAll('img'));
+    await Promise.all(imgs.map(function (img) {
+      if (img.complete && img.naturalWidth) {
+        return img.decode ? img.decode().catch(function () {}) : Promise.resolve();
+      }
+      return new Promise(function (resolve) {
+        img.onload = function () {
+          if (img.decode) img.decode().then(resolve, resolve);
+          else resolve();
+        };
+        img.onerror = resolve;
+      });
+    }));
+    await ensureFonts();
+    await new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
+
     const dataUrl = await htmlToImage.toPng(canvas, {
       width: CANVAS.width,
       height: CANVAS.height,
-      pixelRatio: 1,
+      pixelRatio: EXPORT_RATIO,
       cacheBust: true,
+      skipAutoScale: true,
+      style: {
+        transform: 'none',
+        transformOrigin: 'top left',
+      },
+      filter: function (node) {
+        if (!node || !node.getAttribute) return true;
+        return node.getAttribute('data-guides') == null && node.getAttribute('data-safe-zones') == null;
+      },
     });
     downloadDataUrl(dataUrl, queued[i].id + '_story.png');
-    await new Promise(function (r) { setTimeout(r, 350); });
+    await new Promise(function (r) { setTimeout(r, 400); });
   }
   hold.innerHTML = '';
   state.exporting = false;
-  setNote('Descargadas ' + queued.length + ' historia(s)');
+  setNote('Descargadas ' + queued.length + ' historia(s) en alta calidad');
   renderList();
 }
 
