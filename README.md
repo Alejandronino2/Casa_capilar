@@ -31,6 +31,7 @@ Luego abre http://localhost:8080/
 - **Buscar imagen:** elige una foto de la galeria o el explorador; se le quita el fondo en el navegador y se guarda en `assets/products/{id}.png`.
 - **Guardar:** escribe `content/products.json`.
 - **Checks + Descargar:** PNG 1080×1920 de las piezas marcadas (se baja a tu carpeta de descargas).
+- **Borrados:** al borrar, la pieza va a la pestana Borrados. Desde ahi puedes restaurarla o eliminarla para siempre (tambien por checks).
 - **Recortar producto:** `extract.php` para lotes.
 
 La primera vez que quites un fondo, el navegador descarga el modelo WASM (hace falta internet).

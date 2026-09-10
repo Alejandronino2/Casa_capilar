@@ -34,9 +34,18 @@
       <div class="aside-head">
         <label style="display:flex;align-items:center;gap:8px">
           <input type="checkbox" id="checkAll">
-          <h2>Piezas</h2>
+          <h2 id="listTitle">Piezas</h2>
         </label>
         <button type="button" class="btn" id="btnNew">+ Nueva</button>
+      </div>
+      <div class="list-tabs">
+        <button type="button" class="tab active" id="tabActive" data-view="active">Piezas</button>
+        <button type="button" class="tab" id="tabTrash" data-view="trash">Borrados <span id="trashCount">0</span></button>
+      </div>
+      <div class="bulk-bar" id="bulkBar">
+        <button type="button" class="btn btn-danger" id="btnTrashChecked" disabled>A borrados (0)</button>
+        <button type="button" class="btn hidden" id="btnRestoreChecked" disabled>Restaurar (0)</button>
+        <button type="button" class="btn btn-danger hidden" id="btnPurgeChecked" disabled>Eliminar (0)</button>
       </div>
       <ul class="list" id="storyList"></ul>
     </aside>
@@ -98,6 +107,7 @@
               <button type="button" class="btn" id="btnGradient">Fondo CSS</button>
               <button type="button" class="btn" id="btnLeaves">Foto hojas</button>
             </div>
+            <div class="brand-grid" id="brandBgGrid" aria-label="Fondos de marca"></div>
             <label class="field"><span class="lbl">Original 16:9</span><input type="text" id="f-original"></label>
           </div>
         </section>

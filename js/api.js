@@ -14,6 +14,28 @@ export async function saveStories(stories) {
   return res.json();
 }
 
+export async function fetchTrash() {
+  const res = await fetch('api/trash.php', { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  return (data && data.items) ? data.items : [];
+}
+
+export async function trashAction(action, ids, stories) {
+  const body = { action: action, ids: ids };
+  if (stories) body.stories = stories;
+  const res = await fetch('api/trash.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error((data && data.error) || 'No se pudo actualizar borrados');
+  }
+  return data;
+}
+
 export async function aiStatus() {
   const res = await fetch('api/ai.php', { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);

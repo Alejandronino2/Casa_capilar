@@ -1,9 +1,11 @@
 import { CANVAS, DEFAULT_STORY, GRADIENT, LIMITS, SAFE, normalizeStory, renderStory, ensureFonts } from './template.js';
-import { fetchStories, saveStories, uploadImage, readAsDataUrl, downloadDataUrl, aiStatus, completeStoryCopy } from './api.js';
+import { fetchStories, saveStories, uploadImage, readAsDataUrl, downloadDataUrl, aiStatus, completeStoryCopy, fetchTrash, trashAction } from './api.js';
 import { importProductCutout } from './cutout.js';
 
 const state = {
   stories: [],
+  trash: [],
+  view: 'active',
   selectedId: '',
   baseline: '',
   checked: {},
@@ -22,8 +24,60 @@ const state = {
 
 const $ = function (sel) { return document.querySelector(sel); };
 
+const BRAND_BACKGROUNDS = [
+  { id: 'pocion', name: 'Poción', path: 'assets/backgrounds/brand-pocion.jpg' },
+  { id: 'click-hair', name: 'Click Hair', path: 'assets/backgrounds/brand-click-hair.jpg' },
+  { id: 'herbacol', name: 'HERBACOL', path: 'assets/backgrounds/brand-herbacol.jpg' },
+  { id: 'bell-franz', name: 'Bell Franz', path: 'assets/backgrounds/brand-bell-franz.jpg' },
+  { id: 'anyeluz', name: 'anyeluz', path: 'assets/backgrounds/brand-anyeluz.jpg' },
+  { id: 'origen-botanico', name: 'Origen Botánico', path: 'assets/backgrounds/brand-origen-botanico.jpg' },
+];
+
+function refreshBrandActive() {
+  const current = selected() ? selected().background : '';
+  document.querySelectorAll('#brandBgGrid .brand-btn').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-bg') === current);
+  });
+}
+
+function renderBrandButtons() {
+  const host = $('#brandBgGrid');
+  if (!host) return;
+  host.innerHTML = BRAND_BACKGROUNDS.map(function (brand) {
+    return '<button type="button" class="brand-btn" data-brand="' + brand.id + '" data-bg="' + brand.path + '" style="background-image:url(\'' + brand.path + '\')"><span>' + brand.name + '</span></button>';
+  }).join('');
+  refreshBrandActive();
+}
+
 function selected() {
-  return state.stories.find(function (s) { return s.id === state.selectedId; }) || state.stories[0];
+  const list = visibleStories();
+  return list.find(function (s) { return s.id === state.selectedId; }) || list[0];
+}
+
+function visibleStories() {
+  return state.view === 'trash' ? state.trash : state.stories;
+}
+
+function checkedIds() {
+  return Object.keys(state.checked).filter(function (id) { return state.checked[id]; });
+}
+
+function applyServerLists(result) {
+  if (result.stories) {
+    state.stories = result.stories.map(function (s, i) { return normalizeStory(s, i); });
+    state.baseline = JSON.stringify(state.stories);
+  }
+  if (result.trash) {
+    state.trash = result.trash.map(function (s, i) { return normalizeStory(s, i); });
+  }
+  Object.keys(state.checked).forEach(function (id) {
+    const exists = visibleStories().some(function (s) { return s.id === id; });
+    if (!exists) delete state.checked[id];
+  });
+  const list = visibleStories();
+  if (!list.some(function (s) { return s.id === state.selectedId; })) {
+    state.selectedId = list[0] ? list[0].id : '';
+  }
 }
 
 function baselineStories() {
@@ -79,7 +133,11 @@ function storyBadge(story) {
 
 async function preview() {
   const story = selected();
-  if (!story) return;
+  if (!story) {
+    $('#previewHost').innerHTML = '';
+    $('#warnings').innerHTML = '<p class="warn-ok">Selecciona una pieza.</p>';
+    return;
+  }
   const metrics = await renderStory($('#previewHost'), story, {
     autoFit: state.autoFit,
     showGuides: state.showGuides,
@@ -144,30 +202,121 @@ function renderWarnings(story, metrics) {
 
 function renderList() {
   const ul = $('#storyList');
-  const allChecked = state.stories.length > 0 && state.stories.every(function (s) { return state.checked[s.id]; });
+  const list = visibleStories();
+  const allChecked = list.length > 0 && list.every(function (s) { return state.checked[s.id]; });
   $('#checkAll').checked = allChecked;
-  ul.innerHTML = state.stories.map(function (story) {
-    const active = story.id === state.selectedId;
-    const badge = storyBadge(story);
-    return '<li><div class="item' + (active ? ' active' : '') + (storyIsDirty(story) ? ' is-dirty' : '') + '" data-id="' + story.id + '">' +
-      '<div class="item-top"><div style="display:flex;gap:8px;min-width:0">' +
-      '<input type="checkbox" data-check="' + story.id + '"' + (state.checked[story.id] ? ' checked' : '') + '>' +
-      '<div style="min-width:0"><p class="item-title">' + (story.titulo || '(sin titulo)') + '</p>' +
-      '<p class="item-id">' + story.id + '</p></div></div>' +
-      '<span class="badge ' + badge.cls + '">' + badge.text + '</span></div>' +
-      '<div class="item-meta"><span>' + (story.textLayout === 'stacked' ? 'apilado' : '2 columnas') + '</span>' +
-      '<span>' + (story.background === GRADIENT ? 'fondo CSS' : 'foto') + '</span>' +
-      '<button type="button" data-dup="' + story.id + '">duplicar</button>' +
-      '<button type="button" class="del" data-del="' + story.id + '">borrar</button></div></div></li>';
-  }).join('');
-  $('#downloadBtn').textContent = 'Descargar (' + Object.keys(state.checked).filter(function (id) { return state.checked[id]; }).length + ')';
-  $('#downloadBtn').disabled = !Object.keys(state.checked).some(function (id) { return state.checked[id]; }) || state.exporting;
+  $('#listTitle').textContent = state.view === 'trash' ? 'Borrados' : 'Piezas';
+  $('#tabActive').classList.toggle('active', state.view === 'active');
+  $('#tabTrash').classList.toggle('active', state.view === 'trash');
+  $('#trashCount').textContent = String(state.trash.length);
+  $('#btnNew').classList.toggle('hidden', state.view === 'trash');
+
+  const n = checkedIds().filter(function (id) {
+    return list.some(function (s) { return s.id === id; });
+  }).length;
+  const trashBtn = $('#btnTrashChecked');
+  const restoreBtn = $('#btnRestoreChecked');
+  const purgeBtn = $('#btnPurgeChecked');
+  trashBtn.classList.toggle('hidden', state.view !== 'active');
+  restoreBtn.classList.toggle('hidden', state.view !== 'trash');
+  purgeBtn.classList.toggle('hidden', state.view !== 'trash');
+  trashBtn.disabled = state.view !== 'active' || n === 0;
+  restoreBtn.disabled = state.view !== 'trash' || n === 0;
+  purgeBtn.disabled = state.view !== 'trash' || n === 0;
+  trashBtn.textContent = 'A borrados (' + n + ')';
+  restoreBtn.textContent = 'Restaurar (' + n + ')';
+  purgeBtn.textContent = 'Eliminar (' + n + ')';
+
+  if (!list.length) {
+    ul.innerHTML = '<li class="help" style="padding:12px">' +
+      (state.view === 'trash' ? 'No hay piezas en borrados.' : 'No hay piezas. Crea una nueva.') +
+      '</li>';
+  } else {
+    ul.innerHTML = list.map(function (story) {
+      const active = story.id === state.selectedId;
+      const badge = state.view === 'trash'
+        ? { cls: 'warn', text: 'borrada' }
+        : storyBadge(story);
+      const actions = state.view === 'trash'
+        ? '<button type="button" data-restore="' + story.id + '">restaurar</button>' +
+          '<button type="button" class="del" data-purge="' + story.id + '">eliminar</button>'
+        : '<button type="button" data-dup="' + story.id + '">duplicar</button>' +
+          '<button type="button" class="del" data-del="' + story.id + '">borrar</button>';
+      return '<li><div class="item' + (active ? ' active' : '') + (state.view === 'active' && storyIsDirty(story) ? ' is-dirty' : '') + '" data-id="' + story.id + '">' +
+        '<div class="item-top"><div style="display:flex;gap:8px;min-width:0">' +
+        '<input type="checkbox" data-check="' + story.id + '"' + (state.checked[story.id] ? ' checked' : '') + '>' +
+        '<div style="min-width:0"><p class="item-title">' + (story.titulo || '(sin titulo)') + '</p>' +
+        '<p class="item-id">' + story.id + '</p></div></div>' +
+        '<span class="badge ' + badge.cls + '">' + badge.text + '</span></div>' +
+        '<div class="item-meta"><span>' + (story.textLayout === 'stacked' ? 'apilado' : '2 columnas') + '</span>' +
+        '<span>' + (story.background === GRADIENT ? 'fondo CSS' : 'foto') + '</span>' +
+        actions + '</div></div></li>';
+    }).join('');
+  }
+
+  const checkedActive = checkedIds().filter(function (id) {
+    return state.stories.some(function (s) { return s.id === id; });
+  }).length;
+  $('#downloadBtn').textContent = 'Descargar (' + checkedActive + ')';
+  $('#downloadBtn').disabled = checkedActive === 0 || state.exporting || state.view === 'trash';
   updateAiButtons();
+  setFormEditable(state.view === 'active');
+}
+
+function setFormEditable(enabled) {
+  document.querySelectorAll('.aside-right input, .aside-right textarea, .aside-right select, .aside-right button').forEach(function (el) {
+    if (el.id === 'btnAi' || el.id === 'btnAiChecked') return;
+    el.disabled = !enabled;
+  });
+  if ($('#btnAi')) $('#btnAi').disabled = !enabled || !!state.processingId;
+  if ($('#btnAiChecked')) {
+    const n = checkedIds().filter(function (id) { return state.stories.some(function (s) { return s.id === id; }); }).length;
+    $('#btnAiChecked').disabled = !enabled || !!state.processingId || n === 0;
+  }
+}
+
+async function moveToTrash(ids) {
+  if (!ids.length) return;
+  const result = await trashAction('trash', ids, state.stories);
+  applyServerLists(result);
+  state.view = 'active';
+  renderList();
+  fillForm();
+  await preview();
+  refreshSaveState(ids.length + (ids.length === 1 ? ' pieza enviada a borrados' : ' piezas enviadas a borrados'));
+}
+
+async function restoreFromTrash(ids) {
+  if (!ids.length) return;
+  const result = await trashAction('restore', ids);
+  applyServerLists(result);
+  state.view = 'active';
+  if (result.restored && result.restored[0]) state.selectedId = result.restored[0];
+  renderList();
+  fillForm();
+  await preview();
+  refreshSaveState(ids.length + (ids.length === 1 ? ' pieza restaurada' : ' piezas restauradas'));
+}
+
+async function purgeFromTrash(ids) {
+  if (!ids.length) return;
+  const result = await trashAction('purge', ids);
+  applyServerLists(result);
+  renderList();
+  fillForm();
+  await preview();
+  refreshSaveState(ids.length + (ids.length === 1 ? ' pieza eliminada para siempre' : ' piezas eliminadas para siempre'));
 }
 
 function fillForm() {
   const s = selected();
-  if (!s) return;
+  if (!s) {
+    ['f-id','f-titulo','f-textoA','f-textoB','f-notes','f-product','f-bg','f-original','f-accent-txt'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    return;
+  }
   $('#f-id').value = s.id;
   $('#f-titulo').value = s.titulo;
   $('#f-textoA').value = s.textoA;
@@ -188,9 +337,11 @@ function fillForm() {
   $('#f-accent').value = /^#[0-9a-f]{6}$/i.test(s.accentColor) ? s.accentColor : '#2B2B2B';
   $('#f-accent-txt').value = s.accentColor;
   updateCompare();
+  refreshBrandActive();
 }
 
 function patch(partial) {
+  if (state.view === 'trash') return;
   state.stories = state.stories.map(function (story) {
     if (story.id !== state.selectedId) return story;
     const next = normalizeStory(Object.assign({}, story, partial));
@@ -360,7 +511,7 @@ function bind() {
     };
   });
   $('#saveBtn').onclick = async function () {
-    if (state.saving || !isDirty()) return;
+    if (state.view === 'trash' || state.saving || !isDirty()) return;
     state.saving = true;
     refreshSaveState('Guardando cambios…');
     renderList();
@@ -381,6 +532,7 @@ function bind() {
   };
   $('#downloadBtn').onclick = function () { downloadChecked(); };
   $('#btnNew').onclick = function () {
+    if (state.view === 'trash') return;
     let n = state.stories.length + 1;
     while (state.stories.some(function (s) { return s.id === 'pieza-' + n; })) n += 1;
     const created = normalizeStory(Object.assign({}, DEFAULT_STORY, { id: 'pieza-' + n }));
@@ -388,6 +540,38 @@ function bind() {
     state.selectedId = created.id;
     renderList(); fillForm(); preview();
     refreshSaveState();
+  };
+  $('#tabActive').onclick = function () {
+    state.view = 'active';
+    state.checked = {};
+    state.selectedId = state.stories[0] ? state.stories[0].id : '';
+    renderList(); fillForm(); preview();
+  };
+  $('#tabTrash').onclick = function () {
+    state.view = 'trash';
+    state.checked = {};
+    state.selectedId = state.trash[0] ? state.trash[0].id : '';
+    renderList(); fillForm(); preview();
+  };
+  $('#btnTrashChecked').onclick = async function () {
+    const ids = checkedIds().filter(function (id) { return state.stories.some(function (s) { return s.id === id; }); });
+    if (!ids.length) return;
+    if (!confirm('Mover ' + ids.length + ' pieza(s) a borrados?')) return;
+    try { await moveToTrash(ids); }
+    catch (err) { refreshSaveState(err.message || 'No se pudo enviar a borrados', 'err'); }
+  };
+  $('#btnRestoreChecked').onclick = async function () {
+    const ids = checkedIds().filter(function (id) { return state.trash.some(function (s) { return s.id === id; }); });
+    if (!ids.length) return;
+    try { await restoreFromTrash(ids); }
+    catch (err) { refreshSaveState(err.message || 'No se pudo restaurar', 'err'); }
+  };
+  $('#btnPurgeChecked').onclick = async function () {
+    const ids = checkedIds().filter(function (id) { return state.trash.some(function (s) { return s.id === id; }); });
+    if (!ids.length) return;
+    if (!confirm('Eliminar para siempre ' + ids.length + ' pieza(s)? Esto no se puede deshacer.')) return;
+    try { await purgeFromTrash(ids); }
+    catch (err) { refreshSaveState(err.message || 'No se pudo eliminar', 'err'); }
   };
   $('#storyList').onclick = function (e) {
     const check = e.target.getAttribute && e.target.getAttribute('data-check');
@@ -397,6 +581,7 @@ function bind() {
       return;
     }
     if (e.target.getAttribute('data-dup')) {
+      if (state.view === 'trash') return;
       const id = e.target.getAttribute('data-dup');
       const src = state.stories.find(function (s) { return s.id === id; });
       let suf = 2;
@@ -410,12 +595,25 @@ function bind() {
     }
     if (e.target.getAttribute('data-del')) {
       const id = e.target.getAttribute('data-del');
-      if (!confirm('Eliminar «' + id + '»?')) return;
-      state.stories = state.stories.filter(function (s) { return s.id !== id; });
-      delete state.checked[id];
-      if (state.selectedId === id) state.selectedId = state.stories[0] ? state.stories[0].id : '';
-      renderList(); fillForm(); preview();
-      refreshSaveState();
+      if (!confirm('Mover «' + id + '» a borrados?')) return;
+      moveToTrash([id]).catch(function (err) {
+        refreshSaveState(err.message || 'No se pudo enviar a borrados', 'err');
+      });
+      return;
+    }
+    if (e.target.getAttribute('data-restore')) {
+      const id = e.target.getAttribute('data-restore');
+      restoreFromTrash([id]).catch(function (err) {
+        refreshSaveState(err.message || 'No se pudo restaurar', 'err');
+      });
+      return;
+    }
+    if (e.target.getAttribute('data-purge')) {
+      const id = e.target.getAttribute('data-purge');
+      if (!confirm('Eliminar «' + id + '» para siempre?')) return;
+      purgeFromTrash([id]).catch(function (err) {
+        refreshSaveState(err.message || 'No se pudo eliminar', 'err');
+      });
       return;
     }
     const item = e.target.closest('.item');
@@ -425,7 +623,7 @@ function bind() {
     }
   };
   $('#checkAll').onchange = function (e) {
-    state.stories.forEach(function (s) { state.checked[s.id] = e.target.checked; });
+    visibleStories().forEach(function (s) { state.checked[s.id] = e.target.checked; });
     renderList();
   };
 
@@ -452,8 +650,15 @@ function bind() {
   slider('f-title', 'titleSize', function (v) { return v + 'px'; });
   slider('f-body', 'bodySize', function (v) { return v + 'px'; });
   $('#f-accent').oninput = function () { patch({ accentColor: $('#f-accent').value }); };
-  $('#btnGradient').onclick = function () { patch({ background: GRADIENT }); };
-  $('#btnLeaves').onclick = function () { patch({ background: 'assets/backgrounds/leaves-green-vertical.jpg' }); };
+  renderBrandButtons();
+  $('#brandBgGrid').onclick = function (e) {
+    const btn = e.target.closest('[data-bg]');
+    if (!btn) return;
+    patch({ background: btn.getAttribute('data-bg') });
+    refreshBrandActive();
+  };
+  $('#btnGradient').onclick = function () { patch({ background: GRADIENT }); refreshBrandActive(); };
+  $('#btnLeaves').onclick = function () { patch({ background: 'assets/backgrounds/leaves-green-vertical.jpg' }); refreshBrandActive(); };
   $('#btnUsePng').onclick = function () { patch({ productImage: 'assets/products/' + selected().id + '.png' }); };
   $('#btnAi').onclick = function () { completeWithAi([selected()]); };
   $('#btnAiChecked').onclick = function () {
@@ -513,6 +718,12 @@ async function boot() {
   } catch (err) {
     refreshSaveState('No se pudo leer products.json', 'err');
     state.stories = [normalizeStory({ id: 'pieza-1' })];
+  }
+  try {
+    const trash = await fetchTrash();
+    state.trash = trash.map(function (s, i) { return normalizeStory(s, i); });
+  } catch (err) {
+    state.trash = [];
   }
   state.baseline = JSON.stringify(state.stories);
   const params = new URLSearchParams(window.location.search);
