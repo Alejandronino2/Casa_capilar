@@ -6,3 +6,9 @@ desktop.ini
 .vscode/
 api/config.local.php
 api/config.php
+
+# Backups temporales de fondos de marca
+assets/backgrounds/*-old.*
+assets/backgrounds/*-prev.*
+assets/backgrounds/src/
+assets/backgrounds/clickhair.png
