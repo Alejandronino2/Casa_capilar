@@ -7,7 +7,11 @@
   <link rel="icon" href="favicon.ico" type="image/x-icon">
   <link rel="icon" href="favicon.png" type="image/png" sizes="180x180">
   <link rel="apple-touch-icon" href="favicon.png">
-  <link rel="stylesheet" href="css/app.css">
+  <?php
+    $cssV = @filemtime(__DIR__ . '/css/app.css') ?: time();
+    $jsV = @filemtime(__DIR__ . '/js/extract.js') ?: time();
+  ?>
+  <link rel="stylesheet" href="css/app.css?v=<?= (int) $cssV ?>">
 </head>
 <body>
 <div class="app">
@@ -70,6 +74,6 @@
     </aside>
   </div>
 </div>
-<script type="module" src="js/extract.js"></script>
+<script type="module" src="js/extract.js?v=<?= (int) $jsV ?>"></script>
 </body>
 </html>

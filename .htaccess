@@ -1,6 +1,13 @@
 DirectoryIndex index.php
 Options -Indexes
 
+<IfModule mod_headers.c>
+  # HTML/PHP sin cache largo; CSS/JS se versionan con ?v=filemtime
+  <FilesMatch "\.(php|html)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
 <IfModule mod_php.c>
   php_value upload_max_filesize 40M
   php_value post_max_size 45M

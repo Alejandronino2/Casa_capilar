@@ -207,14 +207,14 @@ input[type=range] { width: 100%; accent-color: #7cc86a; }
 }
 .brand-btn {
   --neon: #ff4da6;
-  position: relative; min-height: 64px; border: 1px solid color-mix(in srgb, var(--neon) 55%, transparent);
+  position: relative; min-height: 64px; border: 1px solid rgba(255, 77, 166, 0.55);
   border-radius: 10px; overflow: hidden; cursor: pointer; padding: 0;
   background-color: #f5f0ea; background-size: cover; background-position: center;
   color: #1a1a1a; font: 700 11px Poppins, sans-serif; letter-spacing: .04em; text-align: center;
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--neon) 18%, transparent),
-    0 0 14px color-mix(in srgb, var(--neon) 28%, transparent),
-    inset 0 0 18px color-mix(in srgb, var(--neon) 12%, transparent);
+    0 0 0 1px rgba(255, 77, 166, 0.18),
+    0 0 14px rgba(255, 77, 166, 0.28),
+    inset 0 0 18px rgba(255, 77, 166, 0.12);
   transition: box-shadow .2s ease, border-color .2s ease, transform .15s ease;
 }
 .brand-btn span {
@@ -222,32 +222,56 @@ input[type=range] { width: 100%; accent-color: #7cc86a; }
   min-height: 64px; padding: 8px 6px;
   background: linear-gradient(180deg, rgba(255,255,255,.1), rgba(255,255,255,.34));
   text-shadow:
-    0 0 6px color-mix(in srgb, var(--neon) 70%, transparent),
-    0 0 14px color-mix(in srgb, var(--neon) 45%, transparent),
+    0 0 6px rgba(255, 77, 166, 0.55),
+    0 0 14px rgba(255, 77, 166, 0.35),
     0 1px 0 rgba(255,255,255,.55);
 }
 .brand-btn:hover {
-  border-color: color-mix(in srgb, var(--neon) 80%, #fff);
+  border-color: rgba(255, 150, 200, 0.9);
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--neon) 35%, transparent),
-    0 0 22px color-mix(in srgb, var(--neon) 45%, transparent),
-    inset 0 0 22px color-mix(in srgb, var(--neon) 18%, transparent);
+    0 0 0 1px rgba(255, 77, 166, 0.35),
+    0 0 22px rgba(255, 77, 166, 0.45),
+    inset 0 0 22px rgba(255, 77, 166, 0.18);
 }
 .brand-btn:hover span { background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.46)); }
 .brand-btn.active {
-  outline: 2px solid color-mix(in srgb, var(--neon) 85%, #fff);
+  outline: 2px solid #ff9ec8;
   outline-offset: 1px;
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--neon) 40%, transparent),
-    0 0 26px color-mix(in srgb, var(--neon) 55%, transparent),
-    inset 0 0 24px color-mix(in srgb, var(--neon) 22%, transparent);
+    0 0 0 1px rgba(255, 77, 166, 0.4),
+    0 0 26px rgba(255, 77, 166, 0.55),
+    inset 0 0 24px rgba(255, 77, 166, 0.22);
 }
-.brand-btn[data-brand="pocion"] { --neon: #ff2d95; color: #ff2d95; }
-.brand-btn[data-brand="click-hair"] { --neon: #ff4d7a; color: #ff4d7a; }
-.brand-btn[data-brand="herbacol"] { --neon: #3dff8a; color: #1fa85a; }
-.brand-btn[data-brand="bell-franz"] { --neon: #4dff9a; color: #109e55; }
-.brand-btn[data-brand="anyeluz"] { --neon: #c9f0ff; color: #1a1a1a; }
-.brand-btn[data-brand="origen-botanico"] { --neon: #8dff6a; color: #3d8f2a; }
+.brand-btn[data-brand="pocion"] {
+  --neon: #ff2d95; color: #ff2d95;
+  border-color: rgba(255, 45, 149, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 45, 149, 0.18), 0 0 14px rgba(255, 45, 149, 0.28), inset 0 0 18px rgba(255, 45, 149, 0.12);
+}
+.brand-btn[data-brand="click-hair"] {
+  --neon: #ff4d7a; color: #ff4d7a;
+  border-color: rgba(255, 77, 122, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 77, 122, 0.18), 0 0 14px rgba(255, 77, 122, 0.28), inset 0 0 18px rgba(255, 77, 122, 0.12);
+}
+.brand-btn[data-brand="herbacol"] {
+  --neon: #3dff8a; color: #1fa85a;
+  border-color: rgba(61, 255, 138, 0.55);
+  box-shadow: 0 0 0 1px rgba(61, 255, 138, 0.18), 0 0 14px rgba(61, 255, 138, 0.28), inset 0 0 18px rgba(61, 255, 138, 0.12);
+}
+.brand-btn[data-brand="bell-franz"] {
+  --neon: #4dff9a; color: #109e55;
+  border-color: rgba(77, 255, 154, 0.55);
+  box-shadow: 0 0 0 1px rgba(77, 255, 154, 0.18), 0 0 14px rgba(77, 255, 154, 0.28), inset 0 0 18px rgba(77, 255, 154, 0.12);
+}
+.brand-btn[data-brand="anyeluz"] {
+  --neon: #c9f0ff; color: #1a1a1a;
+  border-color: rgba(201, 240, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(201, 240, 255, 0.18), 0 0 14px rgba(201, 240, 255, 0.28), inset 0 0 18px rgba(201, 240, 255, 0.12);
+}
+.brand-btn[data-brand="origen-botanico"] {
+  --neon: #8dff6a; color: #3d8f2a;
+  border-color: rgba(141, 255, 106, 0.55);
+  box-shadow: 0 0 0 1px rgba(141, 255, 106, 0.18), 0 0 14px rgba(141, 255, 106, 0.28), inset 0 0 18px rgba(141, 255, 106, 0.12);
+}
 .compare {
   display: flex; flex-direction: column; height: 100%; border: 1px solid rgba(255,255,255,.1);
   border-radius: 12px; background: rgba(0,0,0,.2);
