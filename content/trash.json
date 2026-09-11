@@ -88,5 +88,30 @@
         "notes": "Creada desde extract: TERMO-ROSADO.webp",
         "folder": "anyeluz",
         "deletedAt": "2026-09-10T06:01:10+02:00"
+    },
+    {
+        "id": "maleta-makeup",
+        "titulo": "ANYELUZ",
+        "textoA": "Renueva tu cabello con Anyeluz. Tratamiento capilar profesional para un brillo y suavidad incomparables.",
+        "textoB": "",
+        "hook": "",
+        "cta": "COMPRAR →",
+        "productImage": "assets\/products\/maleta-makeup.png",
+        "background": "assets\/backgrounds\/brand-anyeluz.jpg",
+        "textLayout": "two-col",
+        "productScale": 0.4,
+        "productOffsetX": 0,
+        "productOffsetY": 0,
+        "shelfOffsetY": 0,
+        "shelfScale": 1,
+        "textOffsetY": 0,
+        "textOffsetX": 0,
+        "titleSize": 78,
+        "bodySize": 28,
+        "accentColor": "#2B2B2B",
+        "originalImage": "assets\/originals\/maleta-makeup.jpg",
+        "notes": "Creada desde extract: Maleta-Makeup.jfif",
+        "folder": "anyeluz",
+        "deletedAt": "2026-09-10T20:59:11+02:00"
     }
 ]

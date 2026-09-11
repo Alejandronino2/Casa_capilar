@@ -845,6 +845,43 @@ async function importProduct(file) {
   }
 }
 
+/** Reprocesa la imagen del campo PNG (ruta actual), aunque ya exista o la hayas cambiado a mano. */
+async function reprocessProductFromPath() {
+  const s = selected();
+  if (!s || state.processingId) return;
+  const path = (($('#f-product') && $('#f-product').value) || s.productImage || '').trim();
+  if (!path) {
+    refreshSaveState('Indica una ruta en PNG del producto o busca una imagen.', 'warn');
+    return;
+  }
+  state.processingId = s.id;
+  renderList();
+  refreshSaveState('Cargando ' + path + '…');
+  try {
+    const bust = path + (path.indexOf('?') >= 0 ? '&' : '?') + 'v=' + Date.now();
+    const res = await fetch(bust, { cache: 'no-store' });
+    if (!res.ok) throw new Error('No se pudo cargar ' + path);
+    const blob = await res.blob();
+    const type = blob.type || (/\.png$/i.test(path) ? 'image/png' : 'image/jpeg');
+    const name = path.split('/').pop() || (s.id + '.png');
+    const file = new File([blob], name, { type: type });
+    const cutout = await importProductCutout(file, function (msg) { refreshSaveState(msg); });
+    refreshSaveState('Guardando PNG…');
+    const result = await uploadImage(s.id, cutout.dataUrl, 'product');
+    if (!result.ok) { refreshSaveState(result.error || 'No se pudo guardar', 'err'); return; }
+    state.assetRevision = Date.now();
+    patch({ productImage: result.path });
+    refreshSaveState('Imagen reprocesada · ' + cutout.width + '×' + cutout.height + ' px. Recuerda guardar.');
+  } catch (err) {
+    refreshSaveState(err.message || 'No se pudo procesar la imagen', 'err');
+  } finally {
+    const keepErr = $('#saveNote').classList.contains('err');
+    state.processingId = '';
+    renderList();
+    if (!keepErr && !state.saving) refreshSaveState();
+  }
+}
+
 function bind() {
   $('#chkGuides').onchange = function (e) { state.showGuides = e.target.checked; preview(); };
   if ($('#warnings')) {
@@ -1113,6 +1150,9 @@ function bind() {
   $('#btnGradient').onclick = function () { patch({ background: GRADIENT }); refreshBrandActive(); };
   $('#btnLeaves').onclick = function () { patch({ background: 'assets/backgrounds/leaves-green-vertical.jpg' }); refreshBrandActive(); };
   $('#btnUsePng').onclick = function () { patch({ productImage: 'assets/products/' + selected().id + '.png' }); };
+  if ($('#btnReprocessPng')) {
+    $('#btnReprocessPng').onclick = function () { reprocessProductFromPath(); };
+  }
   $('#btnAi').onclick = function () { completeWithAi([selected()]); };
   $('#btnAiChecked').onclick = function () {
     completeWithAi(state.stories.filter(function (s) { return state.checked[s.id]; }));

@@ -114,8 +114,9 @@
               <div class="row">
                 <button type="button" class="btn btn-primary" id="btnBrowse">Buscar imagen</button>
                 <button type="button" class="btn" id="btnUsePng">Usar id.png</button>
+                <button type="button" class="btn" id="btnReprocessPng" title="Quita el fondo de la imagen actual del campo PNG">Procesar / quitar fondo</button>
               </div>
-              <p class="help">Busca o arrastra cualquier foto. El fondo se quita solo y se guarda en assets/products/.</p>
+              <p class="help">Busca o arrastra cualquier foto, o pega una ruta en PNG del producto y pulsa «Procesar / quitar fondo». Se guarda en assets/products/.</p>
             </div>
             <label class="field"><span class="lbl">Fondo</span><input type="text" id="f-bg"></label>
             <div class="row">

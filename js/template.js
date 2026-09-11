@@ -57,14 +57,14 @@ const BRAND_LOGOS = {
   'origen-botanico': 'assets/brands/logo-origen-botanico.png',
 };
 
-/** Acento de marca bajo el nombre (línea estética). */
+/** Acento de marca bajo el nombre (línea estética / neón suave). */
 const BRAND_COLORS = {
-  pocion: '#E50A7B',
-  'click-hair': '#F24B5E',
-  herbacol: '#46782D',
-  'bell-franz': '#5F7A3A',
-  anyeluz: '#252525',
-  'origen-botanico': '#957256',
+  pocion: '#FF2D95',
+  'click-hair': '#FF4D7A',
+  herbacol: '#3DCC6A',
+  'bell-franz': '#3DBF6E',
+  anyeluz: '#2A2A2A',
+  'origen-botanico': '#7CDB4E',
   'sin-carpeta': ACCENT_DEFAULT,
 };
 
@@ -567,6 +567,30 @@ function creamBackdropHtml(accent) {
   );
 }
 
+/** Fondos “escena” (pedestal + halo en la foto): se muestran a pantalla completa. */
+function isScenicBackground(data) {
+  const folder = String(data.folder || '');
+  const bg = String(data.background || '');
+  if (folder === 'click-hair' || folder === 'origen-botanico' || folder === 'pocion') return true;
+  return /brand-click-hair|clickhair|brand-origen-botanico|origen-botanico|brand-pocion/i.test(bg);
+}
+
+/** Superficie del pedestal en JPGs escénicos (1080×1920). */
+const SCENIC_PEDESTAL_Y = {
+  'click-hair': 1360,
+  'origen-botanico': 1345,
+  pocion: 1315,
+};
+
+function scenicBackdropHtml(bgSrc) {
+  return (
+    '<div style="position:absolute;inset:0;background:#1a120c"></div>' +
+    '<img src="' + esc(bgSrc) + '" alt="" width="' + CANVAS.width + '" height="' + CANVAS.height + '" style="position:absolute;inset:0;width:' + CANVAS.width + 'px;height:' + CANVAS.height + 'px;object-fit:cover;object-position:center">' +
+    // Velos neutros crema para legibilidad (sirve rosa y verde)
+    '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,252,246,0.52) 0%,rgba(255,252,246,0.16) 14%,transparent 26%,transparent 58%,rgba(255,250,242,0.20) 78%,rgba(250,246,238,0.40) 100%);pointer-events:none"></div>'
+  );
+}
+
 function hexToRgba(hex, alpha) {
   const h = String(hex || ACCENT_DEFAULT).replace('#', '');
   const full = h.length === 3 ? h.split('').map(function (c) { return c + c; }).join('') : h;
@@ -652,6 +676,7 @@ export async function renderStory(host, data, options) {
   const ctaText = String(data.cta != null ? data.cta : DEFAULT_STORY.cta).trim();
 
   const usesPhoto = data.background !== GRADIENT && String(data.background || '').trim() !== '';
+  const scenic = usesPhoto && isScenicBackground(data);
   const bgSrc = usesPhoto ? bust(data.background) : '';
   const prodSrc = data.productImage ? bust(data.productImage) : '';
 
@@ -676,6 +701,15 @@ export async function renderStory(host, data, options) {
   const titleHeight = ZONES.titleHeight;
   const hookTop = Math.max(ZONES.hookTop, titleTop + titleHeight + 8);
   const heroTopAdj = Math.max(ZONES.heroTop, hookTop + 44);
+  const scenicPedestalY = SCENIC_PEDESTAL_Y[data.folder] || SCENIC_PEDESTAL_Y['click-hair'];
+  // El producto no invade la zona del texto A (espacios tipográficos intactos)
+  const heroBottomAdj = scenic
+    ? clamp(
+        Math.min(scenicPedestalY, ZONES.lowerTop - 24) + (Number(data.shelfOffsetY) || 0),
+        heroTopAdj + 220,
+        SAFE.areaBottom - 44
+      )
+    : ZONES.heroBottom;
 
   let visible = { width: 1, height: 1, contentRatioW: 1, contentRatioH: 1 };
   if (!productMissing && product.img) {
@@ -698,21 +732,30 @@ export async function renderStory(host, data, options) {
     productScale: data.productScale,
     productOffsetX: data.productOffsetX,
     productOffsetY: data.productOffsetY,
-    shelfOffsetY: data.shelfOffsetY,
+    // En escena el pedestal Y ya está en heroBottomAdj; no sumar shelf otra vez
+    shelfOffsetY: scenic ? 0 : data.shelfOffsetY,
     shelfScale: data.shelfScale,
     areaTop: heroTopAdj,
-    areaBottom: ZONES.heroBottom,
-    maxWidth: 1020,
+    areaBottom: heroBottomAdj,
+    maxWidth: scenic ? 780 : 1020,
   });
 
   const textOffY = Number(data.textOffsetY) || 0;
   const textOffX = Number(data.textOffsetX) || 0;
   const contentBottom = SAFE.areaBottom - 10;
   const footerH = ZONES.footerHeight;
-  let footerTop = ZONES.footerTop + textOffY * 0.2;
-  footerTop = clamp(footerTop, ZONES.lowerTop + 160, contentBottom - footerH);
+  // Espacios tipográficos fijos (no se mueven por el fondo escénico)
   let lowerTop = ZONES.lowerTop + textOffY + (Number(data.shelfOffsetY) || 0) * 0.12;
-  lowerTop = clamp(lowerTop, layout.pedestalSurface + 28, footerTop - 120);
+  lowerTop = clamp(lowerTop, layout.pedestalSurface + 28, SAFE.areaBottom - 200);
+  let footerTop = ZONES.footerTop + textOffY * 0.2;
+  // Reservar sitio para texto A (beneficios + descripción) sin esconderlos
+  const reservedA =
+    (badge ? 36 : 0) +
+    (ingredients.length ? 40 : 0) +
+    (phrases.length ? 64 : 0) +
+    118;
+  footerTop = Math.max(footerTop, lowerTop + reservedA);
+  footerTop = clamp(footerTop, lowerTop + 120, contentBottom - footerH);
 
   const renderedHeight = layout.height;
   const productUpscale = product.natural ? renderedHeight / product.natural.height : 1;
@@ -754,24 +797,24 @@ export async function renderStory(host, data, options) {
 
   if (phrases.length) {
     lowerParts +=
-      '<div data-fit="a" style="margin:0 auto 16px;max-width:820px;overflow:hidden;height:48px;display:flex;align-items:center;justify-content:center">' +
-      '<div style="width:100%;font-family:Poppins,sans-serif;font-weight:500;line-height:1.2;color:rgba(37,37,37,0.78);text-align:center">' +
+      '<div data-fit="a" style="margin:0 auto 16px;max-width:820px;overflow:hidden;height:48px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' +
+      '<div style="width:100%;font-family:Poppins,sans-serif;font-weight:500;line-height:1.2;color:rgba(37,37,37,0.82);text-align:center;text-shadow:0 1px 0 rgba(255,255,255,0.55)">' +
       phrases.map(function (p, i) {
         return (i ? '<span style="margin:0 12px;opacity:0.4">•</span>' : '') + esc(p);
       }).join('') +
       '</div></div>';
   } else {
-    lowerParts += '<div data-fit="a" style="height:1px;overflow:hidden;opacity:0"><div></div></div>';
+    lowerParts += '<div data-fit="a" style="height:1px;overflow:hidden;opacity:0;flex-shrink:0"><div></div></div>';
   }
 
   lowerParts +=
-    '<div data-fit="desc" style="margin:0 auto;max-width:820px;height:110px;overflow:hidden;display:flex;align-items:flex-start;justify-content:center">' +
-    '<div style="width:100%;font-family:Poppins,sans-serif;font-weight:500;line-height:1.38;color:rgba(37,37,37,0.70);text-align:center;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden">' +
+    '<div data-fit="desc" style="margin:0 auto;max-width:820px;height:110px;overflow:hidden;display:flex;align-items:flex-start;justify-content:center;flex-shrink:0">' +
+    '<div style="width:100%;font-family:Poppins,sans-serif;font-weight:500;line-height:1.38;color:rgba(37,37,37,0.78);text-align:center;text-shadow:0 1px 0 rgba(255,255,255,0.45)">' +
     esc(description) +
     '</div></div>';
 
   const lowerHtml =
-    '<div style="position:absolute;left:' + (90 + textOffX) + 'px;top:' + lowerTop + 'px;width:' + (900 - Math.abs(textOffX) * 2) + 'px;max-height:' + Math.max(80, footerTop - lowerTop - 8) + 'px;overflow:hidden">' +
+    '<div style="position:absolute;left:' + (90 + textOffX) + 'px;top:' + lowerTop + 'px;width:' + (900 - Math.abs(textOffX) * 2) + 'px;max-height:' + Math.max(reservedA, footerTop - lowerTop - 8) + 'px;overflow:visible;z-index:6">' +
     lowerParts +
     '</div>';
 
@@ -787,29 +830,52 @@ export async function renderStory(host, data, options) {
     : '';
 
   const footerHtml =
-    '<div style="position:absolute;left:90px;top:' + footerTop + 'px;width:900px;height:' + footerH + 'px;display:flex;align-items:center;justify-content:center;gap:22px;flex-wrap:nowrap;overflow:hidden">' +
+    '<div style="position:absolute;left:90px;top:' + footerTop + 'px;width:900px;height:' + footerH + 'px;display:flex;align-items:center;justify-content:center;gap:22px;flex-wrap:nowrap;overflow:hidden;z-index:6">' +
     sizeCapsule +
     ctaHtml +
     '</div>';
 
+  const backdropHtml = scenic && !bg.error
+    ? scenicBackdropHtml(bgSrc)
+    : (
+      creamBackdropHtml(accent) +
+      (usesPhoto && !bg.error
+        ? '<img src="' + esc(bgSrc) + '" alt="" width="' + CANVAS.width + '" height="' + CANVAS.height + '" style="position:absolute;inset:0;width:' + CANVAS.width + 'px;height:' + CANVAS.height + 'px;object-fit:cover;object-position:center;opacity:0.22;mix-blend-mode:multiply">' +
+          '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(247,238,231,0.58) 0%,rgba(248,240,234,0.78) 42%,rgba(241,223,212,0.9) 100%);pointer-events:none"></div>'
+        : '')
+    );
+
+  // En escena el halo/pedestal ya vienen en la foto; sí añadimos luz para que el producto destaque
+  const haloHtml = scenic
+    ? ''
+    : '<div style="position:absolute;left:' + haloLeft + 'px;top:' + haloTop + 'px;width:' + haloSize + 'px;height:' + haloSize + 'px;background:radial-gradient(circle, ' + hexToRgba(accent, 0.16) + ' 0%, ' + hexToRgba(accent, 0.05) + ' 42%, transparent 68%);pointer-events:none;z-index:1"></div>';
+
+  const lightW = Math.max(460, layout.visibleWidth * 1.45);
+  const lightH = Math.max(560, (layout.visibleHeight || layout.height) * 1.65);
+  const lightLeft = layout.visibleCenterX - lightW / 2;
+  const lightTop = layout.top + layout.height * 0.38 - lightH / 2;
+  const productLightHtml =
+    '<div style="position:absolute;left:' + lightLeft + 'px;top:' + lightTop + 'px;width:' + lightW + 'px;height:' + lightH + 'px;background:radial-gradient(ellipse at 50% 42%, rgba(255,255,255,' + (scenic ? '0.72' : '0.55') + ') 0%, ' + hexToRgba(accent, scenic ? 0.28 : 0.16) + ' 32%, transparent 70%);pointer-events:none;z-index:2;mix-blend-mode:screen"></div>' +
+    '<div style="position:absolute;left:' + (layout.visibleCenterX - lightW * 0.28) + 'px;top:' + (layout.top - 30) + 'px;width:' + (lightW * 0.56) + 'px;height:' + (layout.height * 0.5) + 'px;background:radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.42) 0%, transparent 72%);pointer-events:none;z-index:2"></div>';
+
+  const contactShadowHtml = scenic
+    ? '<div style="position:absolute;left:' + (layout.visibleCenterX - layout.visibleWidth * 0.28) + 'px;top:' + (layout.pedestalSurface - 4) + 'px;width:' + (layout.visibleWidth * 0.56) + 'px;height:18px;border-radius:50%;background:radial-gradient(ellipse, rgba(120,40,70,0.28) 0%, transparent 72%);z-index:2"></div>'
+    : '<div style="position:absolute;left:' + (layout.visibleCenterX - layout.visibleWidth * 0.42) + 'px;top:' + (layout.pedestalSurface - 6) + 'px;width:' + (layout.visibleWidth * 0.84) + 'px;height:28px;border-radius:50%;background:radial-gradient(ellipse, rgba(40,25,20,0.22) 0%, transparent 72%);z-index:2"></div>';
+
   host.innerHTML =
     '<div id="story-canvas" data-story-id="' + esc(data.id) + '" data-story-ready="false" style="position:relative;width:' + CANVAS.width + 'px;height:' + CANVAS.height + 'px;overflow:hidden;background:#F7EEE7;isolation:isolate;font-family:Poppins,sans-serif;-webkit-font-smoothing:antialiased">' +
-    creamBackdropHtml(accent) +
-    (usesPhoto && !bg.error
-      ? '<img src="' + esc(bgSrc) + '" alt="" width="' + CANVAS.width + '" height="' + CANVAS.height + '" style="position:absolute;inset:0;width:' + CANVAS.width + 'px;height:' + CANVAS.height + 'px;object-fit:cover;object-position:center;opacity:0.22;mix-blend-mode:multiply">' +
-        '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(247,238,231,0.58) 0%,rgba(248,240,234,0.78) 42%,rgba(241,223,212,0.9) 100%);pointer-events:none"></div>'
-      : '') +
+    backdropHtml +
     // BRAND + línea de color (logo Click Hair u otras marcas en texto)
     '<div style="position:absolute;left:120px;top:' + ZONES.brandTop + 'px;width:840px;text-align:center">' +
     (brandLogoReady
-      ? '<img src="' + esc(brandLogoUrl) + '" alt="' + esc(brand || 'marca') + '" width="' + logoDisplayW + '" height="' + logoDisplayH + '" style="display:block;margin:0 auto;width:' + logoDisplayW + 'px;height:' + logoDisplayH + 'px;object-fit:contain">' +
-        '<div style="margin:14px auto 0;width:' + brandLineW + 'px;height:4px;border-radius:999px;background:linear-gradient(90deg, transparent 0%, ' + brandLine + ' 12%, ' + brandLine + ' 88%, transparent 100%);box-shadow:0 4px 14px ' + hexToRgba(brandLine, 0.35) + ';opacity:0.95"></div>'
+      ? '<img src="' + esc(brandLogoUrl) + '" alt="' + esc(brand || 'marca') + '" width="' + logoDisplayW + '" height="' + logoDisplayH + '" style="display:block;margin:0 auto;width:' + logoDisplayW + 'px;height:' + logoDisplayH + 'px;object-fit:contain;filter:drop-shadow(0 0 6px ' + hexToRgba(brandLine, 0.55) + ') drop-shadow(0 0 16px ' + hexToRgba(brandLine, 0.35) + ')">' +
+        '<div style="margin:14px auto 0;width:' + brandLineW + 'px;height:4px;border-radius:999px;background:linear-gradient(90deg, transparent 0%, ' + hexToRgba(brandLine, 0.35) + ' 8%, ' + brandLine + ' 22%, #fff 50%, ' + brandLine + ' 78%, ' + hexToRgba(brandLine, 0.35) + ' 92%, transparent 100%);box-shadow:0 0 8px ' + hexToRgba(brandLine, 0.75) + ', 0 0 18px ' + hexToRgba(brandLine, 0.45) + ', 0 4px 14px ' + hexToRgba(brandLine, 0.35) + ';opacity:0.98"></div>'
       : (brand
         ? '<div style="display:inline-block;text-align:center;max-width:90%">' +
-          '<div style="font-family:Poppins,sans-serif;font-weight:500;font-size:20px;letter-spacing:0.34em;text-transform:uppercase;color:rgba(37,37,37,0.42)">' + esc(brand) + '</div>' +
-          '<div style="margin:14px auto 0;width:112%;height:4px;border-radius:999px;background:linear-gradient(90deg, transparent 0%, ' + brandLine + ' 12%, ' + brandLine + ' 88%, transparent 100%);box-shadow:0 4px 14px ' + hexToRgba(brandLine, 0.35) + ';opacity:0.95"></div>' +
+          '<div style="font-family:Poppins,sans-serif;font-weight:500;font-size:20px;letter-spacing:0.34em;text-transform:uppercase;color:rgba(37,37,37,0.42);text-shadow:0 0 10px ' + hexToRgba(brandLine, 0.35) + '">' + esc(brand) + '</div>' +
+          '<div style="margin:14px auto 0;width:112%;height:4px;border-radius:999px;background:linear-gradient(90deg, transparent 0%, ' + hexToRgba(brandLine, 0.35) + ' 8%, ' + brandLine + ' 22%, #fff 50%, ' + brandLine + ' 78%, ' + hexToRgba(brandLine, 0.35) + ' 92%, transparent 100%);box-shadow:0 0 8px ' + hexToRgba(brandLine, 0.75) + ', 0 0 18px ' + hexToRgba(brandLine, 0.45) + ', 0 4px 14px ' + hexToRgba(brandLine, 0.35) + ';opacity:0.98"></div>' +
           '</div>'
-        : '<div style="margin:10px auto 0;width:40px;height:2px;border-radius:999px;background:' + brandLine + ';opacity:0.45"></div>')) +
+        : '<div style="margin:10px auto 0;width:40px;height:2px;border-radius:999px;background:' + brandLine + ';box-shadow:0 0 8px ' + hexToRgba(brandLine, 0.55) + ';opacity:0.55"></div>')) +
     '</div>' +
     // TITLE (empuja hacia abajo si hay logo)
     '<div data-fit="title" style="position:absolute;left:' + geo.title.x + 'px;top:' + titleTop + 'px;width:' + geo.title.width + 'px;height:' + titleHeight + 'px;overflow:hidden;display:flex;align-items:flex-end;justify-content:center">' +
@@ -819,14 +885,13 @@ export async function renderStory(host, data, options) {
     '<div style="width:100%;font-family:Poppins,sans-serif;font-weight:500;line-height:1.2;letter-spacing:0.02em;color:rgba(37,37,37,0.62);text-align:center">' +
     esc(hookText) +
     '</div></div>' +
-    // HALO
-    '<div style="position:absolute;left:' + haloLeft + 'px;top:' + haloTop + 'px;width:' + haloSize + 'px;height:' + haloSize + 'px;background:radial-gradient(circle, ' + hexToRgba(accent, 0.16) + ' 0%, ' + hexToRgba(accent, 0.05) + ' 42%, transparent 68%);pointer-events:none;z-index:1"></div>' +
-    // Sombra de contacto (sin pedestal)
-    '<div style="position:absolute;left:' + (layout.visibleCenterX - layout.visibleWidth * 0.42) + 'px;top:' + (layout.pedestalSurface - 6) + 'px;width:' + (layout.visibleWidth * 0.84) + 'px;height:28px;border-radius:50%;background:radial-gradient(ellipse, rgba(40,25,20,0.22) 0%, transparent 72%);z-index:2"></div>' +
+    haloHtml +
+    productLightHtml +
+    contactShadowHtml +
     // PRODUCT
     '<div style="position:absolute;left:' + layout.left + 'px;top:' + layout.top + 'px;width:' + layout.width + 'px;height:' + layout.height + 'px;z-index:3">' +
     (!productMissing
-      ? '<img src="' + esc(prodSrc) + '" alt="" style="width:' + layout.width + 'px;height:' + layout.height + 'px;object-fit:contain;object-position:bottom center;filter:contrast(1.06) saturate(1.05) drop-shadow(0 5px 7px rgba(40,25,20,0.28)) drop-shadow(0 26px 42px rgba(40,25,20,0.14))">'
+      ? '<img src="' + esc(prodSrc) + '" alt="" style="width:' + layout.width + 'px;height:' + layout.height + 'px;object-fit:contain;object-position:bottom center;filter:brightness(1.07) contrast(1.08) saturate(1.06) drop-shadow(0 0 16px rgba(255,255,255,0.55)) drop-shadow(0 0 28px ' + hexToRgba(accent, 0.35) + ') drop-shadow(0 10px 22px rgba(40,25,20,0.22))">'
       : '<div style="position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:360px;height:420px;border:3px dashed rgba(37,37,37,0.28);border-radius:36px;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:rgba(37,37,37,0.5);font-weight:500;font-size:26px;line-height:1.3">Falta el PNG del producto</div>') +
     '</div>' +
     lowerHtml +
@@ -837,9 +902,9 @@ export async function renderStory(host, data, options) {
   const canvas = host.querySelector('#story-canvas');
   const titleFit = fitBox(host.querySelector('[data-fit="title"]'), data.titleSize, LIMITS.titleSize.min, autoFit);
   const hookFit = fitBox(host.querySelector('[data-fit="hook"]'), Math.min(data.bodySize + 2, 28), 16, autoFit);
-  const fitA = fitBox(host.querySelector('[data-fit="a"]'), Math.min(data.bodySize + 2, 30), 16, autoFit && phrases.length > 0);
+  const fitA = fitBox(host.querySelector('[data-fit="a"]'), Math.min(data.bodySize + 2, 30), 14, autoFit && phrases.length > 0);
   const descEl = host.querySelector('[data-fit="desc"]');
-  const fitDesc = descEl ? fitBox(descEl, Math.min(Math.max(data.bodySize + 2, 28), 34), 18, autoFit) : { size: data.bodySize, overflow: false };
+  const fitDesc = descEl ? fitBox(descEl, Math.min(Math.max(data.bodySize + 2, 28), 34), 16, autoFit) : { size: data.bodySize, overflow: false };
   const fitB = fitBox(host.querySelector('[data-fit="b"]'), Math.min(data.bodySize + 4, 28), 16, autoFit && !!sizeLabel);
 
   if (highlight && titleFit.overflow) host.querySelector('[data-fit="title"]').style.outline = '1px dashed rgba(220,38,38,0.9)';

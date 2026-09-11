@@ -197,25 +197,48 @@ input[type=range] { width: 100%; accent-color: #7cc86a; }
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px;
 }
 .brand-btn {
-  position: relative; min-height: 64px; border: 1px solid rgba(255,255,255,.12);
+  --neon: #ff4da6;
+  position: relative; min-height: 64px; border: 1px solid color-mix(in srgb, var(--neon) 55%, transparent);
   border-radius: 10px; overflow: hidden; cursor: pointer; padding: 0;
   background-color: #f5f0ea; background-size: cover; background-position: center;
-  color: #1a1a1a; font: 700 11px Poppins, sans-serif; letter-spacing: .02em; text-align: center;
+  color: #1a1a1a; font: 700 11px Poppins, sans-serif; letter-spacing: .04em; text-align: center;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--neon) 18%, transparent),
+    0 0 14px color-mix(in srgb, var(--neon) 28%, transparent),
+    inset 0 0 18px color-mix(in srgb, var(--neon) 12%, transparent);
+  transition: box-shadow .2s ease, border-color .2s ease, transform .15s ease;
 }
 .brand-btn span {
   display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;
   min-height: 64px; padding: 8px 6px;
-  background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.38));
-  text-shadow: 0 1px 0 rgba(255,255,255,.75);
+  background: linear-gradient(180deg, rgba(255,255,255,.1), rgba(255,255,255,.34));
+  text-shadow:
+    0 0 6px color-mix(in srgb, var(--neon) 70%, transparent),
+    0 0 14px color-mix(in srgb, var(--neon) 45%, transparent),
+    0 1px 0 rgba(255,255,255,.55);
 }
-.brand-btn:hover span { background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.48)); }
-.brand-btn.active { outline: 2px solid #34d399; outline-offset: 1px; }
-.brand-btn[data-brand="pocion"] { color: #c2186a; }
-.brand-btn[data-brand="click-hair"] { color: #d81b60; }
-.brand-btn[data-brand="herbacol"] { color: #1b4332; }
-.brand-btn[data-brand="bell-franz"] { color: #004d25; }
-.brand-btn[data-brand="anyeluz"] { color: #111; }
-.brand-btn[data-brand="origen-botanico"] { color: #8d5b4c; }
+.brand-btn:hover {
+  border-color: color-mix(in srgb, var(--neon) 80%, #fff);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--neon) 35%, transparent),
+    0 0 22px color-mix(in srgb, var(--neon) 45%, transparent),
+    inset 0 0 22px color-mix(in srgb, var(--neon) 18%, transparent);
+}
+.brand-btn:hover span { background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.46)); }
+.brand-btn.active {
+  outline: 2px solid color-mix(in srgb, var(--neon) 85%, #fff);
+  outline-offset: 1px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--neon) 40%, transparent),
+    0 0 26px color-mix(in srgb, var(--neon) 55%, transparent),
+    inset 0 0 24px color-mix(in srgb, var(--neon) 22%, transparent);
+}
+.brand-btn[data-brand="pocion"] { --neon: #ff2d95; color: #ff2d95; }
+.brand-btn[data-brand="click-hair"] { --neon: #ff4d7a; color: #ff4d7a; }
+.brand-btn[data-brand="herbacol"] { --neon: #3dff8a; color: #1fa85a; }
+.brand-btn[data-brand="bell-franz"] { --neon: #4dff9a; color: #109e55; }
+.brand-btn[data-brand="anyeluz"] { --neon: #c9f0ff; color: #1a1a1a; }
+.brand-btn[data-brand="origen-botanico"] { --neon: #8dff6a; color: #3d8f2a; }
 .compare {
   display: flex; flex-direction: column; height: 100%; border: 1px solid rgba(255,255,255,.1);
   border-radius: 12px; background: rgba(0,0,0,.2);
