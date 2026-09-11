@@ -457,7 +457,7 @@ function renderList() {
       const items = byFolder[folder.id] || [];
       if (!items.length && folder.id === 'sin-carpeta') return '';
       if (!items.length && !folder.locked) return '';
-      const collapsed = !!state.collapsed[folder.id];
+      const collapsed = state.collapsed[folder.id] !== false;
       const delBtn = folder.locked || items.length
         ? ''
         : '<button type="button" class="del" data-del-folder="' + folder.id + '">x</button>';
@@ -1004,7 +1004,8 @@ function bind() {
     const toggle = e.target.closest('[data-toggle-folder]');
     if (toggle) {
       const fid = toggle.getAttribute('data-toggle-folder');
-      state.collapsed[fid] = !state.collapsed[fid];
+      // undefined/true = colapsada; false = abierta
+      state.collapsed[fid] = state.collapsed[fid] === false ? true : false;
       renderList();
       return;
     }
@@ -1249,11 +1250,17 @@ async function boot() {
   if (select && state.stories.some(function (s) { return s.id === select; })) state.selectedId = select;
   else state.selectedId = state.stories[0] ? state.stories[0].id : '';
   created.forEach(function (id) { state.checked[id] = true; });
+  // Carpetas colapsadas por defecto; solo abrir la de la pieza seleccionada / URL
+  state.folders.forEach(function (f) {
+    if (state.collapsed[f.id] === undefined) state.collapsed[f.id] = true;
+  });
   if (folderParam) state.collapsed[folderParam] = false;
-  else if (select) {
-    const sel = state.stories.find(function (s) { return s.id === select; });
+  else if (state.selectedId) {
+    const sel = state.stories.find(function (s) { return s.id === state.selectedId; });
     if (sel && sel.folder) state.collapsed[sel.folder] = false;
   }
+  // Pintar lista ya (antes de IA / preview) para que carpetas y piezas se vean al instante
+  renderList();
   try {
     const status = await aiStatus();
     state.aiConfigured = !!(status && status.configured);
@@ -1262,7 +1269,7 @@ async function boot() {
         : status && status.provider === 'openai' ? 'ChatGPT'
         : 'IA';
       $('#aiHelp').textContent = state.aiConfigured
-        ? name + ': con «Leer foto» activa lee el envase y pone titulo real + venta.'
+        ? name + ': con «Leer foto» activa lee el envase y pone titulo real + texto de venta.'
         : 'Falta clave de IA. Pon groq_api_key (gratis) en api/config.local.php → console.groq.com/keys';
     }
   } catch (err) {
